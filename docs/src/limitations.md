@@ -71,6 +71,7 @@ guards, not to warn you off anything you can still do:
 | A convolution plan with only one direction's kernels generated | Dereferences the half it was told to skip |
 | Zero-padding on any axis but VkFFT's own first one | Creates, runs and reads uninitialized memory |
 | A convolution over three or more axes, or over a layout that omits an axis | Rejects a leading or trailing omit and accepts a middle one while computing something that is no convolution |
+| A single-axis single-upload convolution | Depending on the device, returns an error or divides by zero while generating the kernel and kills the process. The planner builds every one-axis convolution as two axes with a trailing length of 1 instead, which is the same transform |
 
 See also [Known failures](@ref).
 
