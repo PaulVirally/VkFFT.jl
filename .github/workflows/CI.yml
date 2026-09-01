@@ -42,13 +42,13 @@ jobs:
         # release.
         version: ["1.10", "1", "nightly"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # VkFFT is a pinned submodule of libvkfft at lib/VkFFT and libvkfft's
       # CMakeLists.txt fails outright when lib/VkFFT/vkFFT/vkFFT.h is missing,
       # so this checkout has to be recursive.
       - name: Check out libvkfft
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.LIBVKFFT_REPOSITORY }}
           ref: ${{ env.LIBVKFFT_REF }}
@@ -103,10 +103,10 @@ jobs:
     # driver cannot do the argument submission it needs.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Check out libvkfft
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.LIBVKFFT_REPOSITORY }}
           ref: ${{ env.LIBVKFFT_REF }}
@@ -188,7 +188,7 @@ jobs:
             extension: VkFFTMetalExt
             os: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: julia-actions/setup-julia@v2
         with:
