@@ -36,7 +36,7 @@ jobs:
     name: Build the site and deploy it
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # "1" rather than the 1.10 compat floor. docs/Project.toml declares the
       # package it documents through a [sources] entry with a relative path,
