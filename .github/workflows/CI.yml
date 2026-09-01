@@ -82,7 +82,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # VKFFT_WRAPPER_PATH is the name the OpenCL runner reads. It becomes the
       # libvkfft_path preference in process, before VkFFT is loaded. The Metal
@@ -131,7 +131,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # Pkg.test is not what runs here. It would start the OpenCL half of the
       # suite, which then spawns the Metal half as a child, and neither pocl
@@ -194,7 +194,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # No wrapper on this runner and none needed. VkFFT dlopens the library on
       # first use, so loading the package and its extensions never reaches the
