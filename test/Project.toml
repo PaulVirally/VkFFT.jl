@@ -1,0 +1,19 @@
+[deps]
+AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+pocl_jll = "627d6b7a-bbe6-5189-83e7-98cc0a5aeadd"
+
+[compat]
+AbstractFFTs = "1.5"
+Aqua = "0.8"
+FFTW = "1.8"
+OpenCL = "0.10"
+Preferences = "1.4"
+pocl_jll = "6, 7"

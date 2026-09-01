@@ -1,0 +1,68 @@
+# Builds the manual in docs/ and deploys it to the gh-pages branch. There is
+# no deploy step below: docs/make.jl calls deploydocs itself, guarded on
+# ENV["CI"] and with push_preview=true, which is why pull requests build too.
+#
+# The build needs no GPU and no libvkfft shared library. VkFFT reads the
+# libvkfft_path preference in __init__ and only dlopens the library on the
+# first call that needs it, and docs/make.jl passes doctest=false because every
+# example in the site needs a device.
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  # contents write is the push onto gh-pages. statuses write is the
+  # "documentation" check Documenter posts against a pull request so the
+  # preview is reachable from it. actions write lets julia-actions/cache evict
+  # the cache entry it replaces.
+  actions: write
+  contents: write
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  docs:
+    name: Build the site and deploy it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # "1" rather than the 1.10 compat floor. docs/Project.toml declares the
+      # package it documents through a [sources] entry with a relative path,
+      # and Pkg only understands [sources] from 1.11 on.
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - uses: julia-actions/cache@v2
+
+      # docs/Manifest.toml is gitignored, so this is a full resolve. The
+      # [sources] entry develops the parent package, so no Pkg.develop call
+      # here can drift out of step with it.
+      - name: Instantiate the docs environment
+        run: |
+          set -o pipefail
+          julia --startup-file=no --project=docs -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Build the site and deploy it
+        run: |
+          set -o pipefail
+          julia --startup-file=no --project=docs docs/make.jl
+        env:
+          # Documenter uses ssh when DOCUMENTER_KEY is present and non-empty,
+          # and falls back to https with GITHUB_TOKEN otherwise. A missing
+          # secret expands to the empty string, and DOCUMENTER_KEY is not set
+          # here, so this deploys over https with the token.
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

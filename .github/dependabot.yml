@@ -1,0 +1,9 @@
+# Julia dependencies are CompatHelper's job. Dependabot does not read
+# Project.toml.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # "/" means .github/workflows, not the repository root.
+    directory: "/"
+    schedule:
+      interval: "monthly"

@@ -1,0 +1,223 @@
+# Every job builds the libvkfft wrapper from source. There is no JLL yet and
+# the suite cannot load without the shared library, and building on every run
+# is what catches the C side and the Julia side drifting apart.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Where the wrapper is built from. The ref floats, so a wrapper change that
+  # breaks the bindings shows up here. Put a full 40 character commit hash in
+  # to make a run reproducible. Whatever these name has to be pushed, since
+  # nothing local is visible from a runner.
+  LIBVKFFT_REPOSITORY: PaulVirally/libvkfft
+  LIBVKFFT_REF: main
+
+jobs:
+  test:
+    name: Julia ${{ matrix.version }} - ubuntu-latest - OpenCL on pocl
+    runs-on: ubuntu-latest
+    # A nightly failure is usually an upstream regression rather than a defect
+    # here, so the nightly leg reports without blocking. It stays out of the
+    # required checks for the same reason.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # 1.10 is the compat floor in Project.toml and 1 is the current
+        # release.
+        version: ["1.10", "1", "nightly"]
+    steps:
+      - uses: actions/checkout@v5
+
+      # VkFFT is a pinned submodule of libvkfft at lib/VkFFT and libvkfft's
+      # CMakeLists.txt fails outright when lib/VkFFT/vkFFT/vkFFT.h is missing,
+      # so this checkout has to be recursive.
+      - name: Check out libvkfft
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.LIBVKFFT_REPOSITORY }}
+          ref: ${{ env.LIBVKFFT_REF }}
+          path: libvkfft
+          submodules: recursive
+
+      # pocl-opencl-icd is deliberately absent. The device comes from pocl_jll
+      # in test/Project.toml, and apt's pocl would register a second driver in
+      # /etc/OpenCL/vendors, leaving which one runs up to platform ordering.
+      - name: Install the OpenCL headers and an ICD loader
+        run: |
+          set -o pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            opencl-headers ocl-icd-opencl-dev
+
+      # Backend 3 is OpenCL. The wrapper is handed OpenCL objects created by
+      # OpenCL.jl's own loader and reaches the driver through the dispatch
+      # table each object carries, so it has to link against an ICD loader
+      # rather than against a driver.
+      - name: Build the wrapper for backend 3
+        run: |
+          set -o pipefail
+          cmake -S libvkfft -B libvkfft/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVKFFT_BACKEND=3 \
+            -DVKFFT_WRAPPER_BUILD_TESTS=OFF
+          cmake --build libvkfft/build --parallel
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+
+      - uses: julia-actions/cache@v2
+
+      # VKFFT_WRAPPER_PATH is the name the OpenCL runner reads. It becomes the
+      # libvkfft_path preference in process, before VkFFT is loaded. The Metal
+      # and CUDA runners read different names.
+      #
+      # Coverage is off because most of the interesting code paths need a
+      # device, so a number measured on this runner would be misleading.
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: false
+        env:
+          VKFFT_WRAPPER_PATH: ${{ github.workspace }}/libvkfft/build/libvkfft.so
+
+  metal:
+    name: Julia 1 - macos-15 - Metal
+    # macos-15 at least. Metal.jl reports the runner's paravirtualized GPU as
+    # functional from macOS 15 on, and as not functional on macOS 14, whose
+    # driver cannot do the argument submission it needs.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check out libvkfft
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.LIBVKFFT_REPOSITORY }}
+          ref: ${{ env.LIBVKFFT_REF }}
+          path: libvkfft
+          submodules: recursive
+
+      # metal-cpp ships inside the VkFFT checkout at lib/VkFFT/metal-cpp and
+      # libvkfft's CMakeLists.txt checks for it by hand, which is the second
+      # reason the checkout above is recursive.
+      - name: Build the wrapper for backend 5
+        run: |
+          set -o pipefail
+          cmake -S libvkfft -B libvkfft/build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVKFFT_BACKEND=5 \
+            -DVKFFT_WRAPPER_BUILD_TESTS=OFF
+          cmake --build libvkfft/build --parallel
+
+      # Julia 1 only. This job is about the device, and the Linux job above
+      # holds the 1.10 floor.
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - uses: julia-actions/cache@v2
+
+      # Pkg.test is not what runs here. It would start the OpenCL half of the
+      # suite, which then spawns the Metal half as a child, and neither pocl
+      # nor the backend 3 wrapper exists on this runner. The package list below
+      # is the one the suite builds for that child locally.
+      - name: Resolve a project for the Metal suite
+        run: |
+          using Pkg
+          Pkg.develop(PackageSpec(path=ENV["GITHUB_WORKSPACE"]))
+          Pkg.add(["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs"])
+          Pkg.precompile()
+        shell: julia --color=yes {0}
+        env:
+          JULIA_PROJECT: ${{ runner.temp }}/metalenv
+
+      # Printed rather than asserted, so the log says whether there was a GPU
+      # before anyone starts reading test failures.
+      - name: Report the Metal device
+        run: |
+          using Metal
+          println("Metal.functional() = ", Metal.functional())
+          Metal.versioninfo()
+        shell: julia --color=yes {0}
+        env:
+          JULIA_PROJECT: ${{ runner.temp }}/metalenv
+
+      # The last thing this runner includes is a check on VkFFTMetal.jl, which
+      # needs that package checked out beside this one and prints that it is
+      # skipping otherwise. VkFFTMetal.jl has a workflow of its own.
+      - name: Run the Metal suite
+        run: |
+          set -o pipefail
+          julia --color=yes --startup-file=no --project="${{ runner.temp }}/metalenv" test/metal/runtests.jl
+        env:
+          VKFFT_METAL_WRAPPER_PATH: ${{ github.workspace }}/libvkfft/build/libvkfft.dylib
+
+  extensions:
+    name: Extension load - ${{ matrix.package }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # CUDA.jl and Metal.jl both load on a machine with no device they can
+          # use, by documented design, and report it through functional()
+          # instead of throwing. That is what makes this job possible.
+          - package: CUDA
+            extension: VkFFTCUDAExt
+            os: ubuntu-latest
+          - package: OpenCL
+            extension: VkFFTOpenCLExt
+            os: ubuntu-latest
+          - package: Metal
+            extension: VkFFTMetalExt
+            os: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+
+      - uses: julia-actions/cache@v2
+
+      # No wrapper on this runner and none needed. VkFFT dlopens the library on
+      # first use, so loading the package and its extensions never reaches the
+      # C side.
+      - name: Resolve a project holding VkFFT and ${{ matrix.package }}
+        run: |
+          using Pkg
+          Pkg.develop(PackageSpec(path=ENV["GITHUB_WORKSPACE"]))
+          Pkg.add("${{ matrix.package }}")
+          Pkg.precompile()
+        shell: julia --color=yes {0}
+        env:
+          JULIA_PROJECT: ${{ runner.temp }}/extload
+
+      # An extension that fails to activate is silent. Nothing throws, the
+      # package just stops being able to plan for that array type.
+      - name: Assert ${{ matrix.extension }} loaded
+        run: |
+          using ${{ matrix.package }}
+          using VkFFT
+          ext = Base.get_extension(VkFFT, :${{ matrix.extension }})
+          ext === nothing && error("VkFFT loaded next to ${{ matrix.package }} and ${{ matrix.extension }} did not activate.")
+          println("${{ matrix.extension }} is loaded: ", ext)
+        shell: julia --color=yes {0}
+        env:
+          JULIA_PROJECT: ${{ runner.temp }}/extload

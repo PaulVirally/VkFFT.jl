@@ -1,0 +1,39 @@
+name: TagBot
+
+on:
+  issue_comment:
+    types:
+      - created
+  workflow_dispatch:
+    inputs:
+      lookback:
+        default: "3"
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  deployments: read
+  discussions: read
+  issues: read
+  packages: read
+  pages: read
+  pull-requests: read
+  repository-projects: read
+  security-events: read
+  statuses: read
+
+jobs:
+  TagBot:
+    # Every issue comment in the repository triggers this workflow, so the job
+    # itself has to filter on the actor.
+    if: github.event_name == 'workflow_dispatch' || github.actor == 'JuliaTagBot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JuliaRegistries/TagBot@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # DOCUMENTER_KEY is not set in this repository, so this expands to
+          # the empty string and TagBot tags with the token above. A tag pushed
+          # that way does not trigger tag-triggered workflows.
+          ssh: ${{ secrets.DOCUMENTER_KEY }}
