@@ -45,7 +45,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # docs/Manifest.toml is gitignored, so this is a full resolve. The
       # [sources] entry develops the parent package, so no Pkg.develop call
