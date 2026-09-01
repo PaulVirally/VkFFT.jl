@@ -78,7 +78,7 @@ jobs:
             -DVKFFT_WRAPPER_BUILD_TESTS=OFF
           cmake --build libvkfft/build --parallel
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
 
@@ -127,7 +127,7 @@ jobs:
 
       # Julia 1 only. This job is about the device, and the Linux job above
       # holds the 1.10 floor.
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1"
 
@@ -190,7 +190,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1"
 

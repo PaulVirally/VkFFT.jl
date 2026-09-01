@@ -41,7 +41,7 @@ jobs:
       # "1" rather than the 1.10 compat floor. docs/Project.toml declares the
       # package it documents through a [sources] entry with a relative path,
       # and Pkg only understands [sources] from 1.11 on.
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: "1"
 
