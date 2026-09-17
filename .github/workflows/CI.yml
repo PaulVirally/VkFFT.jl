@@ -81,7 +81,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # VKFFT_WRAPPER_PATH is the name the OpenCL runner reads. It becomes the
       # libvkfft_path preference in process, before VkFFT is loaded. The Metal
@@ -130,7 +130,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # Pkg.test is not what runs here. It would start the OpenCL half of the
       # suite, which then spawns the Metal half as a child, and neither pocl
@@ -196,7 +196,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # ${{ matrix.jll }} is the extension's second trigger, so it has to be in
       # the project for the extension to activate at all. Adding it never
