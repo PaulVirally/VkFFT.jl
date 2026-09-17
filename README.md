@@ -8,12 +8,12 @@ Tolmachev's runtime-compiled GPU FFT library.
 
 This package defines all the exported functions, plan types, plan cache, etc.
 This package is not the one you load if you want to use VkFFT in Julia. Rather,
-you must load on the backends.
+you must load one of the backends.
 
 ## Which package do you want?
 
-Load `VkFFTCUDA`, `VkFFTOpenCL` or `VkFFTMetal`, not this Each one of these
-re-exports all the symbols from this package. You want to use
+Load `VkFFTCUDA`, `VkFFTOpenCL` or `VkFFTMetal`, not this package. Each one of
+these re-exports all the symbols from this package. You want to use
 
 - [VkFFTCUDA.jl](https://github.com/PaulVirally/VkFFTCUDA.jl) for `CuArray`
 - [VkFFTOpenCL.jl](https://github.com/PaulVirally/VkFFTOpenCL.jl) for `CLArray`
