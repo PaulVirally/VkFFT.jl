@@ -1,7 +1,7 @@
 name = "VkFFT"
 uuid = "65dc4606-9ae3-4b78-8734-204937373618"
 authors = ["Paul Virally"]
-version = "0.1.0-dev"
+version = "0.1.0"
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
