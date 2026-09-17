@@ -5,15 +5,13 @@
 #
 # gate.jl spawns this in a project of its own (see env.jl for why it cannot be
 # the same process), and it is runnable by hand in any project that has VkFFT,
-# Metal and FFTW:
+# Metal, VkFFT_Metal_jll and FFTW:
 #
 #     julia --project=<that project> VkFFT.jl/test/metal/runtests.jl
 #
 # The wrapper it loads is the Metal build, from VKFFT_METAL_WRAPPER_PATH or the
-# in-tree default. As in the OpenCL runner the preference is set here, before
-# VkFFT is loaded, rather than checked in: the path is absolute and
-# machine-specific, and VkFFT reads the preference in __init__ rather than at
-# precompile time.
+# in-tree default. As in the OpenCL runner the preference is set here rather
+# than checked in, because the path is absolute and machine-specific.
 include("env.jl")
 
 using Preferences
@@ -28,6 +26,7 @@ using Metal
 using Random
 using Test
 using VkFFT
+using VkFFT_Metal_jll
 
 # The tuner writes its records to disk, so this runner gets a throwaway cache
 # directory for the same reasons the OpenCL one does.

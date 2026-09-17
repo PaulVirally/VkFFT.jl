@@ -1,6 +1,5 @@
-# Every job builds the libvkfft wrapper from source. There is no JLL yet and
-# the suite cannot load without the shared library, and building on every run
-# is what catches the C side and the Julia side drifting apart.
+# Jobs that run transforms build libvkfft from source at a floating ref, not a
+# JLL's pinned commit, so they catch the C and Julia sides drifting apart.
 name: CI
 
 on:
@@ -141,7 +140,7 @@ jobs:
         run: |
           using Pkg
           Pkg.develop(PackageSpec(path=ENV["GITHUB_WORKSPACE"]))
-          Pkg.add(["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs"])
+          Pkg.add(["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs", "VkFFT_Metal_jll"])
           Pkg.precompile()
         shell: julia --color=yes {0}
         env:
@@ -180,12 +179,15 @@ jobs:
           # instead of throwing. That is what makes this job possible.
           - package: CUDA
             extension: VkFFTCUDAExt
+            jll: VkFFT_CUDA_jll
             os: ubuntu-latest
           - package: OpenCL
             extension: VkFFTOpenCLExt
+            jll: VkFFT_OpenCL_jll
             os: ubuntu-latest
           - package: Metal
             extension: VkFFTMetalExt
+            jll: VkFFT_Metal_jll
             os: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -196,14 +198,14 @@ jobs:
 
       - uses: julia-actions/cache@v2
 
-      # No wrapper on this runner and none needed. VkFFT dlopens the library on
-      # first use, so loading the package and its extensions never reaches the
-      # C side.
+      # ${{ matrix.jll }} is the extension's second trigger, so it has to be in
+      # the project for the extension to activate at all. Adding it never
+      # reaches the C side either. VkFFT dlopens the wrapper on first use.
       - name: Resolve a project holding VkFFT and ${{ matrix.package }}
         run: |
           using Pkg
           Pkg.develop(PackageSpec(path=ENV["GITHUB_WORKSPACE"]))
-          Pkg.add("${{ matrix.package }}")
+          Pkg.add(["${{ matrix.package }}", "${{ matrix.jll }}"])
           Pkg.precompile()
         shell: julia --color=yes {0}
         env:
@@ -214,10 +216,21 @@ jobs:
       - name: Assert ${{ matrix.extension }} loaded
         run: |
           using ${{ matrix.package }}
+          using ${{ matrix.jll }}
           using VkFFT
           ext = Base.get_extension(VkFFT, :${{ matrix.extension }})
           ext === nothing && error("VkFFT loaded next to ${{ matrix.package }} and ${{ matrix.extension }} did not activate.")
           println("${{ matrix.extension }} is loaded: ", ext)
+
+          # An unavailable JLL is a correct outcome, not a failure. CUDA's
+          # platform augmentation probes for a driver when the JLL precompiles,
+          # so on a runner with no GPU it tags cuda = "none" and ships no
+          # library for the extension to register.
+          if ${{ matrix.jll }}.is_available()
+              println("${{ matrix.jll }} is available and VkFFT resolved: ", VkFFT.library_path())
+          else
+              println("${{ matrix.jll }} is not available on this runner, so there is no path to register.")
+          end
         shell: julia --color=yes {0}
         env:
           JULIA_PROJECT: ${{ runner.temp }}/extload

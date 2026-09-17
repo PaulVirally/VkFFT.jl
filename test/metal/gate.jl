@@ -16,8 +16,11 @@ include("env.jl")
     end
 
     if isempty(reason)
+        # VkFFT_Metal_jll is VkFFTMetalExt's second trigger, so the child needs
+        # it to get the extension at all. The wrapper still comes from the
+        # libvkfft_path preference runtests.jl sets.
         @test _run_in_metal_project(joinpath(@__DIR__, "runtests.jl"), [VKFFT_DIR],
-                                    ["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs"])
+                                    ["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs", "VkFFT_Metal_jll"])
     else
         println("skipping the Metal suite: $reason")
     end

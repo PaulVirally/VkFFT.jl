@@ -2,6 +2,7 @@ module VkFFTMetalExt
 
 using Metal
 using VkFFT
+using VkFFT_Metal_jll
 
 import Metal: MTL, MtlArray
 
@@ -114,6 +115,16 @@ function VkFFT._with_execution(f, x::MtlArray)
         Metal.synchronize(queue)
         res
     end
+end
+
+# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
+# set, wins over it.
+function __init__()
+    if VkFFT_Metal_jll.is_available()
+        VkFFT.EXTENSION_LIBRARY[] = VkFFT_Metal_jll.libvkfft
+    end
+
+    return nothing
 end
 
 end # module

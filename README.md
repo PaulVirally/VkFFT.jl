@@ -1,15 +1,19 @@
 # VkFFT.jl
 
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://paulvirally.github.io/VkFFT.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://paulvirally.github.io/VkFFT.jl/dev/)
+
 Julia bindings for [VkFFT](https://github.com/DTolm/VkFFT), Dmitrii
-Tolmachev's runtime-compiled GPU FFT library. This package has the plan types,
-the AbstractFFTs plan interface, region mapping and the plan cache. The code
-for each device lives in an extension, one per backend.
+Tolmachev's runtime-compiled GPU FFT library.
+
+This package defines all the exported functions, plan types, plan cache, etc.
+This package is not the one you load if you want to use VkFFT in Julia. Rather,
+you must load on the backends.
 
 ## Which package do you want?
 
-`VkFFTCUDA`, `VkFFTOpenCL` or `VkFFTMetal`, not this one. Each is a ten-line
-package that depends on this one and on the GPU package for your device, which
-is what activates the matching extension. They re-export everything here.
+Load `VkFFTCUDA`, `VkFFTOpenCL` or `VkFFTMetal`, not this Each one of these
+re-exports all the symbols from this package. You want to use
 
 - [VkFFTCUDA.jl](https://github.com/PaulVirally/VkFFTCUDA.jl) for `CuArray`
 - [VkFFTOpenCL.jl](https://github.com/PaulVirally/VkFFTOpenCL.jl) for `CLArray`
@@ -17,22 +21,13 @@ is what activates the matching extension. They re-export everything here.
 
 ## Setup
 
-<!-- TODO(jll): install instructions pending VkFFT_{CUDA,OpenCL,Metal}_jll
-     registration. Until then, the libvkfft_path preference is the only way
-     in. This block is rewritten by the JLL wiring wave. -->
-
-There is no JLL yet, so point the package at a locally built
-[`libvkfft`](https://github.com/PaulVirally/libvkfft) wrapper once:
-
 ```julia
-using Preferences, VkFFT
-set_preferences!(VkFFT, "libvkfft_path" => "/path/to/libvkfft.so")
+using Pkg
+Pkg.add("VkFFTOpenCL") # or VkFFTCUDA, or VkFFTMetal
 ```
 
-The wrapper is built per backend (`-DVKFFT_BACKEND=1` for CUDA, `3` for OpenCL,
-`5` for Metal), because VkFFT picks its backend at compile time. That is also
-why one Julia process drives one backend. The build flags and the rest of the
-setup are in the README of the package for your device.
+For devs working on this package itself, see [Building the
+wrapper](https://paulvirally.github.io/VkFFT.jl/stable/building/).
 
 ## Use
 
@@ -40,7 +35,7 @@ The only thing that changes between backends is the array type and the `using`
 line:
 
 ```julia
-using VkFFTOpenCL, OpenCL, LinearAlgebra   # or VkFFTCUDA and CUDA, or VkFFTMetal and Metal
+using VkFFTOpenCL, OpenCL, LinearAlgebra # or VkFFTCUDA and CUDA, or VkFFTMetal and Metal
 
 x = CLArray{ComplexF32}(undef, 256, 64)
 copyto!(x, rand(ComplexF32, 256, 64))
@@ -55,9 +50,10 @@ q * x                    # overwrites x
 
 Entry points stay module-qualified, `VkFFT.plan_fft` rather than a bare
 `plan_fft`, because `AbstractFFTs.plan_fft` on a GPU array type belongs to
-whoever owns that type. What you get back is an `AbstractFFTs.Plan`, so `*`,
-`mul!`, `inv`, `\`, `ldiv!`, `size`, `adjoint` and `AbstractFFTs.fftdims` all
-work.
+whoever owns that type (e.g., `CUDA.jl` owns `fft`, and we don't compete with
+that). What you get back from `VkFFT.plan_fft` is an `AbstractFFTs.Plan`, so
+`*`, `mul!`, `inv`, `\`, `ldiv!`, `size`, `adjoint` and `AbstractFFTs.fftdims`
+all work.
 
 ## Documentation
 
@@ -72,7 +68,6 @@ the sharp edges are in the
 using Pkg; Pkg.test("VkFFT")
 ```
 
-The suite runs on [pocl](https://portablecl.org), so it needs no GPU, and it
-checks every transform against FFTW. On Apple silicon it runs the Metal suite
-too. The header comment of each runner under `test/` says which wrapper it
-expects and which environment variable repoints it.
+The suite runs on [pocl](https://portablecl.org), so it doesn't need a GPU, and
+it checks every transform against FFTW. On Apple Silicon it runs the Metal suite
+too.

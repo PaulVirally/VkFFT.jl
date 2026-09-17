@@ -51,7 +51,7 @@ values), so we throw an error in this package.
 Two more errors can happen relating to the device or the wrapper rather than the
 element type, and both are on [Backends and capabilities](backends.md). Half
 precision on OpenCL needs `cl_khr_fp16`, and half precision on CUDA needs a
-wrapper built against a CUDA toolkit.
+wrapper built against a CUDA toolkit, which the one in the JLL is not.
 
 ## Bugs in VkFFT
 

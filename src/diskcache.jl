@@ -23,8 +23,8 @@ _device_key(roots::Vector{Any}, backend::Val) = throw(ArgumentError("VkFFT has n
 
 # The wrapper library's own contents, which pin the VkFFT version and the
 # wrapper build together. Hashing a multi-megabyte file is not something to do
-# per plan, and the path cannot change without a restart (VkFFT.__init__ reads
-# it), so it is done once.
+# per plan, and the path is fixed for the session once _ensure_library!
+# resolves it, so it is done once.
 const LIBRARY_DIGEST = Ref("")
 
 """

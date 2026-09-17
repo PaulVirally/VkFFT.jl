@@ -2,6 +2,7 @@ module VkFFTOpenCLExt
 
 using OpenCL
 using VkFFT
+using VkFFT_OpenCL_jll
 
 import OpenCL: cl, CLArray
 
@@ -83,6 +84,16 @@ function VkFFT._with_device_handles(f, roots::Vector{Any}, ::Val{:opencl})
                              Base.unsafe_convert(Ptr{cl.cl_command_queue}, queue)]
         GC.@preserve handles f(Base.unsafe_convert(Ptr{Ptr{Cvoid}}, handles))
     end
+end
+
+# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
+# set, wins over it.
+function __init__()
+    if VkFFT_OpenCL_jll.is_available()
+        VkFFT.EXTENSION_LIBRARY[] = VkFFT_OpenCL_jll.libvkfft
+    end
+
+    return nothing
 end
 
 end # module

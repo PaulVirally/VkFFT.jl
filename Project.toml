@@ -15,15 +15,14 @@ Scratch = "6c6a2e73-6563-6170-7368-637461726353"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 OpenCL = "08131aa3-fb12-5dee-8b74-c09406e224a2"
+VkFFT_CUDA_jll = "c6c0cc47-23fd-51ca-b60c-6f984e788db9"
+VkFFT_Metal_jll = "042e462d-e49b-5371-a6d8-d140e9b49131"
+VkFFT_OpenCL_jll = "4b94af74-5903-5048-b3a4-075b7d965b91"
 
 [extensions]
-# TODO: once VkFFT_CUDA_jll, VkFFT_OpenCL_jll and VkFFT_Metal_jll are registered
-# these gain the matching JLL as a second trigger and the libvkfft_path
-# preference turns into a fallback override. JLL UUIDs are fixed at registration
-# time, so wiring a guessed one here would only be churn.
-VkFFTCUDAExt = ["CUDA"]
-VkFFTMetalExt = ["Metal"]
-VkFFTOpenCLExt = ["OpenCL"]
+VkFFTCUDAExt = ["CUDA", "VkFFT_CUDA_jll"]
+VkFFTMetalExt = ["Metal", "VkFFT_Metal_jll"]
+VkFFTOpenCLExt = ["OpenCL", "VkFFT_OpenCL_jll"]
 
 [compat]
 AbstractFFTs = "1.5"
@@ -35,4 +34,7 @@ PrecompileTools = "1.2"
 Preferences = "1.4"
 SHA = "0.7"
 Scratch = "1.2"
+VkFFT_CUDA_jll = "0.1"
+VkFFT_Metal_jll = "0.1"
+VkFFT_OpenCL_jll = "0.1"
 julia = "1.10"

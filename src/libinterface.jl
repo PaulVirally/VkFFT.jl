@@ -6,8 +6,13 @@
 # vkfft_max_dims() and errors if they differ.
 const VKFFT_MAX_FFT_DIMENSIONS = 12
 
-# Set by VkFFT.__init__ from the libvkfft_path preference.
+# Resolved by _ensure_library! before the first ccall. Every @ccall below names
+# it and reads it at call time.
 libvkfft::String = ""
+
+# Where a backend extension puts the wrapper path from its JLL. The
+# libvkfft_path preference wins over it.
+const EXTENSION_LIBRARY = Ref("")
 
 """
     VkFFTConfig
@@ -197,9 +202,10 @@ const LIBRARY_CUDA_TOOLKIT_ROOT = Ref{Union{Nothing, String}}(nothing)
 
 Resolves and ABI-checks libvkfft, once, on the first call that needs the C library.
 
-Doing this lazily rather than in `__init__` keeps `using VkFFT` (and
-precompilation) working with no wrapper installed, which is what the CPU-only
-region tests rely on.
+The path is the `libvkfft_path` preference when it is set, and otherwise
+whatever backend extension loaded. Doing this lazily rather than in `__init__`
+keeps `using VkFFT` (and precompilation) working with no wrapper installed,
+which is what the CPU-only region tests rely on.
 """
 function _ensure_library!()
     LIBRARY_READY[] && return nothing
@@ -207,8 +213,9 @@ function _ensure_library!()
     @lock LIBRARY_LOCK begin
         LIBRARY_READY[] && return nothing
 
-        isempty(libvkfft) && error("VkFFT does not know where libvkfft is. Set the libvkfft_path preference, e.g. `using Preferences; set_preferences!(VkFFT, \"libvkfft_path\" => \"/path/to/libvkfft_icd.dylib\")`, then restart Julia.")
-        isfile(libvkfft) || error("The libvkfft_path preference points at \"$libvkfft\", which is not a file. Set it to the wrapper library built for your backend.")
+        global libvkfft = load_preference(@__MODULE__, "libvkfft_path", EXTENSION_LIBRARY[])
+        isempty(libvkfft) && error("VkFFT does not know where libvkfft is. Install the loader package for your backend, or point the libvkfft_path preference at a wrapper you built yourself: `using Preferences; set_preferences!(VkFFT, \"libvkfft_path\" => \"/path/to/libvkfft.so\")`.")
+        isfile(libvkfft) || error("VkFFT resolved libvkfft to \"$libvkfft\", which is not a file. Point it at the wrapper library built for your backend.")
 
         max_dims = Int(_vkfft_max_dims())
         max_dims == VKFFT_MAX_FFT_DIMENSIONS || error("libvkfft at \"$libvkfft\" was built with VKFFT_MAX_FFT_DIMENSIONS = $max_dims, but VkFFT.jl mirrors vkfft_config with $VKFFT_MAX_FFT_DIMENSIONS slots. Rebuild the wrapper with -DVKFFT_MAX_FFT_DIMENSIONS=$VKFFT_MAX_FFT_DIMENSIONS.")
@@ -244,6 +251,23 @@ function _ensure_library!()
     end
 
     return nothing
+end
+
+"""
+    library_path()
+
+Returns the path of the libvkfft this session resolved.
+
+Resolving happens on the first call, so with neither a `libvkfft_path`
+preference nor a backend extension to supply one this throws the same error as
+planning a transform would.
+
+# Returns
+- The path of the loaded wrapper library
+"""
+function library_path()
+    _ensure_library!()
+    return libvkfft
 end
 
 """

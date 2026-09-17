@@ -53,11 +53,10 @@
         Aqua.test_project_extras(VkFFT)
     end
 
-    # __init__ reads one preference and does nothing else, so a task or a timer
-    # surviving `using VkFFT` would be a real regression, and the kind that
-    # makes Pkg.precompile hang for whoever depends on us. The check loads the
-    # package in a fresh process, which is where most of this set's running
-    # time goes.
+    # `using VkFFT` starts nothing at all, so a task or a timer surviving it
+    # would be a real regression, and the kind that makes Pkg.precompile hang
+    # for whoever depends on us. The check loads the package in a fresh
+    # process, which is where most of this set's running time goes.
     @testset "persistent tasks" begin
         Aqua.test_persistent_tasks(VkFFT)
     end

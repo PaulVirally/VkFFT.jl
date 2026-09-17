@@ -76,6 +76,12 @@ VkFFT.sweep_count
 VkFFT.disk_cache_dir
 ```
 
+## The loaded library
+
+```@docs
+VkFFT.library_path
+```
+
 ## Errors
 
 ```@docs

@@ -21,31 +21,15 @@ capabilities](backends.md) for what each backend is capable of.
 
 ## Install
 
-```@raw html
-<!-- TODO(jll): install instructions pending VkFFT_{CUDA,OpenCL,Metal}_jll
-     registration. Until then, the libvkfft_path preference is the only way
-     in. This block is rewritten by the JLL wiring wave. -->
-```
-
 ```julia
 using Pkg
 Pkg.add("VkFFTOpenCL") # or VkFFTCUDA, or VkFFTMetal
 ```
 
-VkFFT.jl calls [`libvkfft`](https://github.com/PaulVirally/libvkfft), a small C
-wrapper around VkFFT. There is no JLL for that wrapper yet, so it has to be
-built once and named in a preference:
-
-```julia
-using Preferences, VkFFT
-set_preferences!(VkFFT, "libvkfft_path" => "/path/to/libvkfft.so")
-```
-
-VkFFT chooses its backend when it is compiled, so the wrapper is built once
-per backend: `-DVKFFT_BACKEND=1` for CUDA, `3` for OpenCL and `5` for Metal.
-
 OpenCL needs one more preference, and each backend has a short list of its
 limitations. See [Backends and capabilities](backends.md) for more information.
+
+Working on VkFFT.jl itself? See [Building the wrapper](building.md).
 
 ## Quickstart
 

@@ -58,6 +58,7 @@ makedocs(;
         "Migrating from VkFFTCUDA 0.2" => "migration.md",
         "Benchmarks" => "benchmarks.md",
         "API reference" => "api.md",
+        "Building the wrapper" => "building.md",
     ],
 )
 

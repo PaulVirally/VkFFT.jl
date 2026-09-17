@@ -4,10 +4,10 @@
 # planner.jl and aqua.jl, since none of them touches a device and running them
 # once per backend would give the same answer three times.
 #
-# The libvkfft_path preference is set here, before VkFFT is loaded, rather than
-# checked into test/LocalPreferences.toml: the wrapper path is absolute and
-# machine-specific, and VkFFT reads the preference in __init__ rather than at
-# precompile time, so setting it in-process is enough. Override it with
+# The libvkfft_path preference is set here rather than checked into
+# test/LocalPreferences.toml, because the wrapper path is absolute and
+# machine-specific. VkFFT reads the preference on the first call that needs the
+# C library, so setting it in-process is enough. Override it with
 # VKFFT_WRAPPER_PATH to test another build:
 #
 #     VKFFT_WRAPPER_PATH=/path/to/artifact/lib/libvkfft_icd.dylib \
@@ -44,6 +44,7 @@ using OpenCL
 using Random
 using Test
 using VkFFT
+using VkFFT_OpenCL_jll
 using pocl_jll
 
 # VkFFT drives clSetKernelArg with a cl_mem, so OpenCL.jl has to hand out

@@ -10,7 +10,7 @@ package name and UUID did not change, so upgrading in place works.
 | --- | --- |
 | `plan_fft(x)`, through a method on `AbstractFFTs.plan_fft(::CuArray, region)` | `VkFFT.plan_fft(x)` |
 | `fft(x)` routed to VkFFT | `fft(x)` routes to CUFFT. Write `VkFFT.plan_fft(x) * x` |
-| `Pkg.build("VkFFTCUDA")`, which cloned a repository and ran `sudo make install` | Nothing to build at install time. Point the `libvkfft_path` preference at a wrapper |
+| `Pkg.build("VkFFTCUDA")`, which cloned a repository and ran `sudo make install` | Nothing to build at install time. The JLL ships the wrapper |
 | `__precompile__(false)` | Precompiles normally |
 | CUDA only | CUDA, OpenCL and Metal |
 | Complex-to-complex only | Complex-to-complex, real-to-complex, DCT and DST, fused convolution, fused zero-padding |
@@ -42,9 +42,8 @@ interface](plans.md).
 
 ## There is nothing to build
 
-`Pkg.build("VkFFTCUDA")` and the `deps/build.jl` behind it are gone. VkFFT.jl
-finds its wrapper through a preference instead, and will find it through a JLL
-once one is registered. See [Install](@ref).
+`Pkg.build("VkFFTCUDA")` and the `deps/build.jl` behind it are gone. The JLL the
+loader package pulls in ships the wrapper. See [Install](@ref).
 
 ## What is new
 

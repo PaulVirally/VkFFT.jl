@@ -2,6 +2,7 @@ module VkFFTCUDAExt
 
 using CUDA
 using VkFFT
+using VkFFT_CUDA_jll
 
 import CUDA: CuArray, CuContext, CuDevice, DenseCuArray
 
@@ -106,6 +107,27 @@ function VkFFT._with_plan_context(f, ::Val{:cuda}, roots::Vector{Any})
     try
         CUDA.context!(f, context)
     catch
+    end
+
+    return nothing
+end
+
+# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
+# set, wins over it. A JLL that is unavailable but tagged "cuda: none" was
+# precompiled where no driver was visible, so the tag is stale rather than a
+# statement about this machine.
+function __init__()
+    if VkFFT_CUDA_jll.is_available()
+        VkFFT.EXTENSION_LIBRARY[] = VkFFT_CUDA_jll.libvkfft
+    elseif VkFFT_CUDA_jll.host_platform["cuda"] == "none"
+        @error """
+    VkFFT_CUDA_jll was precompiled without an NVIDIA driver present. This can
+    happen when installing on an HPC log-in node, or in a container. Try
+    re-compiling the JLL and re-loading:
+         pkg = Base.PkgId(Base.UUID("c6c0cc47-23fd-51ca-b60c-6f984e788db9"),
+                          "VkFFT_CUDA_jll")
+         Base.compilecache(pkg)
+         # re-start Julia"""
     end
 
     return nothing

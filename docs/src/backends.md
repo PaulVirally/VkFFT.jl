@@ -12,7 +12,7 @@ transforms that have upstream bugs on Metal.
 | --- | --- | --- | --- |
 | `Float32`, `ComplexF32` | yes | yes | yes |
 | `Float64`, `ComplexF64` | yes | yes on every device tested | **no** |
-| `Float16`, `ComplexF16` | only through a wrapper built against a CUDA toolkit | only where the device reports `cl_khr_fp16` | yes |
+| `Float16`, `ComplexF16` | **no** with the JLL, only through a wrapper you build against a CUDA toolkit | only where the device reports `cl_khr_fp16` | yes |
 | Double-double quad, through [`VkFFT.unsafe_plan`](@ref) | yes | yes | **no** |
 | Contiguous views at a nonzero offset | yes | **no** | **no** |
 
@@ -29,7 +29,9 @@ convolution).
 
 For half-precision, you need to build
 [`libvkfft`](https://www.github.com/PaulVirally/libvkfft) yourself against a
-CUDA toolkit.
+CUDA toolkit. The wrapper the JLL ships is not one, so `Float16` and
+`ComplexF16` throw if you installed VkFFTCUDA with `Pkg.add`. [Building the
+wrapper](building.md) is the way around it.
 
 A plan belongs to the CUDA context it was built in. VkFFT loads its nvrtc
 modules and allocates its scratch buffers in whatever context is current when
@@ -139,10 +141,10 @@ this.
 ## Multiple backends need multiple processes
 
 The C++ VkFFT library chooses its backend when it is compiled. A Julia session
-can only drive one backend, whichever wrapper the `libvkfft_path` preference
-names. Loading `VkFFTCUDA` and `VkFFTMetal` into the same session does not give
-you a process that can do both. This is why this package's own Metal test suite
-runs in a child process. A program that needs two backends needs two processes.
+can only drive one backend, whichever one the loader package you imported brings
+in. Loading `VkFFTCUDA` and `VkFFTMetal` into the same session does not give you
+a process that can do both. This is why this package's own Metal test suite runs
+in a child process. A program that needs two backends needs two processes.
 
 `VKFFT_BACKEND` is 1 for CUDA, 3 for OpenCL and 5 for Metal.
 

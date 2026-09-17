@@ -31,9 +31,8 @@
 # than a silent fallback to the local build. See test/wrapper_env.jl for why the
 # three names are distinct.
 #
-# As in the other runners the preference is set here, before VkFFT is loaded,
-# rather than checked in: the path is absolute and machine-specific, and VkFFT
-# reads the preference in __init__ rather than at precompile time.
+# As in the other runners the preference is set here rather than checked in,
+# because the path is absolute and machine-specific.
 include(joinpath(@__DIR__, "..", "wrapper_env.jl"))
 _reject_foreign_wrapper_var("VKFFT_CUDA_WRAPPER_PATH", ["VKFFT_WRAPPER_PATH", "VKFFT_METAL_WRAPPER_PATH"])
 
@@ -61,6 +60,7 @@ using LinearAlgebra
 using Random
 using Test
 using VkFFT
+using VkFFT_CUDA_jll
 
 # The tuner writes its records to disk, so this runner gets a throwaway cache
 # directory for the same reasons the OpenCL one does.

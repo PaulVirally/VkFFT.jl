@@ -2,10 +2,9 @@
 # no deploy step below: docs/make.jl calls deploydocs itself, guarded on
 # ENV["CI"] and with push_preview=true, which is why pull requests build too.
 #
-# The build needs no GPU and no libvkfft shared library. VkFFT reads the
-# libvkfft_path preference in __init__ and only dlopens the library on the
-# first call that needs it, and docs/make.jl passes doctest=false because every
-# example in the site needs a device.
+# The build needs no GPU and no libvkfft shared library. VkFFT resolves and
+# dlopens the library on the first call that needs it, and docs/make.jl passes
+# doctest=false because every example in the site needs a device.
 name: Documentation
 
 on:

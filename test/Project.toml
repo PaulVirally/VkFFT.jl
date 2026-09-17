@@ -8,6 +8,10 @@ Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
+# Only makes the JLL resolvable. `using VkFFT_OpenCL_jll` in opencl/runtests.jl
+# fires the extension trigger. The wrapper still comes from the libvkfft_path
+# preference the runner sets, which shadows the path the JLL registers.
+VkFFT_OpenCL_jll = "4b94af74-5903-5048-b3a4-075b7d965b91"
 pocl_jll = "627d6b7a-bbe6-5189-83e7-98cc0a5aeadd"
 
 [compat]
@@ -16,4 +20,5 @@ Aqua = "0.8"
 FFTW = "1.8"
 OpenCL = "0.10"
 Preferences = "1.4"
+VkFFT_OpenCL_jll = "0.1"
 pocl_jll = "6, 7"

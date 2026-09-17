@@ -21,21 +21,6 @@ include("convplans.jl")
 include("unsafeplans.jl")
 include("tuner.jl")
 
-"""
-    __init__()
-
-Reads the `libvkfft_path` preference into the session.
-
-Reading it here rather than with `@load_preference` at precompile time keeps it
-out of the precompile cache, so pointing the package at a different wrapper
-build does not trigger a recompilation, making a missing wrapper a first-use
-error rather than a load failure.
-"""
-function __init__()
-    global libvkfft = load_preference(@__MODULE__, "libvkfft_path", "")
-    return nothing
-end
-
 # Only the pure planning path. The C library may not be installed at precompile
 # time, and a ccall into it here would make precompilation depend on it.
 @setup_workload begin
