@@ -125,13 +125,12 @@ function VkFFT._with_plan_context(f, ::Val{:cuda}, roots::Vector{Any})
 end
 
 # The JLL's wrapper is the fallback: a libvkfft_path preference built for this
-# backend wins over it. A JLL that is unavailable but tagged "cuda: none" was
-# precompiled where no driver was visible, so the tag is stale rather than a
-# statement about this machine.
+# backend wins over it. A JLL tagged "cuda: none" on a machine with a working
+# driver was precompiled where no driver was visible, so the tag is stale.
 function __init__()
     if VkFFT_CUDA_jll.is_available()
         VkFFT.EXTENSION_LIBRARIES.cuda[] = VkFFT_CUDA_jll.libvkfft
-    elseif VkFFT_CUDA_jll.host_platform["cuda"] == "none"
+    elseif VkFFT_CUDA_jll.host_platform["cuda"] == "none" && CUDA.functional()
         @error """
     VkFFT_CUDA_jll was precompiled without an NVIDIA driver present. This can
     happen when installing on an HPC log-in node, or in a container. Try
