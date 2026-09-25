@@ -302,7 +302,7 @@ const PLAN_CACHE = Dict{PlanCacheKey, Any}()
 const PLAN_CACHE_LOCK = ReentrantLock()
 
 """
-    _get_or_create_plan(create, key::PlanCacheKey)
+    _get_or_create_plan(create, key::PlanCacheKey, cache::Bool)
 
 Returns the cached plan for a key, running `create` and inserting its result on a miss.
 
@@ -311,7 +311,8 @@ kernels, so this serializes concurrent first-time planning. It never serializes
 cache hits for long. The result is whatever the cache holds, so callers assert
 their concrete plan type on it.
 """
-function _get_or_create_plan(create, key::PlanCacheKey)
+function _get_or_create_plan(create, key::PlanCacheKey, cache::Bool)
+    cache || return create()
     @lock PLAN_CACHE_LOCK begin
         cached = get(PLAN_CACHE, key, nothing)
         cached === nothing || return cached
@@ -344,15 +345,15 @@ cache_size() = @lock PLAN_CACHE_LOCK length(PLAN_CACHE)
 ## Planning
 
 """
-    _create_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0)
+    _create_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true)
 
 Returns the cached complex-to-complex plan for this configuration, creating the VkFFT application if needed.
 """
-function _create_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0) where {T <: VkFFTComplex, N, M, IP, B}
+function _create_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTComplex, N, M, IP, B}
     layout = _map_region(sz, region, _max_dims())
     key = (B, device_id, T, sz, region, direction, normalize, IP, false, 0, Int32(0), Int32(0), zeropad, coalesced_memory, aim_threads)
 
-    plan = _get_or_create_plan(key) do
+    plan = _get_or_create_plan(key, cache) do
         VkFFTPlan{T, N, IP, B, M}(_create_app(T, layout, direction, normalize, IP, false, backend, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads), sz, region, direction, normalize, zeropad, device_id, roots)
     end
 

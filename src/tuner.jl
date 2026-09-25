@@ -228,27 +228,6 @@ end
 ## The sweep
 
 """
-    _uncache!(plan::AbstractVkFFTPlan)
-
-Drops a plan from the plan cache and frees its VkFFT application.
-
-The tuner reaches its candidates through the ordinary planning path, so every one
-of them is in the plan cache by the time it has been timed. Freeing a loser
-without removing it first would leave a destroyed plan behind for the next lookup
-of that shape and those tuning values to return.
-"""
-function _uncache!(plan::AbstractVkFFTPlan)
-    @lock PLAN_CACHE_LOCK begin
-        for key in collect(keys(PLAN_CACHE))
-            PLAN_CACHE[key] === plan && delete!(PLAN_CACHE, key)
-        end
-    end
-    unsafe_free!(plan)
-
-    return nothing
-end
-
-"""
     _tuning_params(build, config::VkFFTConfig, roots::Vector{Any}, backend::Val, prototype::AbstractArray, force::Bool)
 
 Returns the `(coalesced_memory, aim_threads)` to plan this configuration with.
@@ -260,9 +239,9 @@ twice over, and each keeps its faster pass. A candidate VkFFT refuses to build i
 skipped rather than fatal, since a thread count or a coalescing width the device
 cannot honour is a fact about the grid and not about the caller.
 
-The winner stays in the plan cache and the losers are freed, so the plan the
-caller gets afterwards is a cache hit rather than a seventeenth compilation, and
-nothing is left holding a VkFFT application no one will apply.
+Candidates are built outside the plan cache and all of them are freed after
+timing. The untuned defaults are one of the sixteen grid points, so a cached
+candidate could be a plan the caller is still holding.
 """
 function _tuning_params(build, config::VkFFTConfig, roots::Vector{Any}, backend::Val{B}, prototype::AbstractArray, force::Bool) where B
     # The backend name and the first twelve hex digits of the key, so a
@@ -281,7 +260,7 @@ function _tuning_params(build, config::VkFFTConfig, roots::Vector{Any}, backend:
     plans = AbstractVkFFTPlan[]
     for coalesced_memory in TUNE_COALESCED_MEMORY, aim_threads in TUNE_AIM_THREADS
         plan = try
-            build(coalesced_memory, aim_threads)
+            build(coalesced_memory, aim_threads; cache=false)
         catch
             continue
         end
@@ -315,9 +294,7 @@ function _tuning_params(build, config::VkFFTConfig, roots::Vector{Any}, backend:
     order = sortperm(times)
     LAST_SWEEP[] = [(knobs[i][1], knobs[i][2], times[i] / repeats / 1e3) for i in order]
 
-    for i in eachindex(plans)
-        i == winner || _uncache!(plans[i])
-    end
+    foreach(unsafe_free!, plans)
 
     @lock DISK_CACHE_LOCK _write_record(path, knobs[winner][1], knobs[winner][2])
 
@@ -329,8 +306,7 @@ end
 # One of these per plan family, sitting where the layout is already mapped and
 # the _create_app argument list is already spelled out. Each builds the untuned
 # configuration for the record key, hands the sweep a closure that plans with a
-# candidate's values, and then plans once more with the winner, which the plan
-# cache answers without compiling anything.
+# candidate's values, and then plans once more with the winner.
 
 """
     _tuned_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool; zeropad::NTuple{2, Int}=NO_ZEROPAD)
@@ -338,7 +314,7 @@ end
 Returns the tuned complex-to-complex plan for this configuration.
 """
 function _tuned_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool; zeropad::NTuple{2, Int}=NO_ZEROPAD) where {T <: VkFFTComplex, N, M, IP, B}
-    plan(coalesced_memory, aim_threads) = _create_plan(T, sz, region, direction, normalize, Val(IP), backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads)
+    plan(coalesced_memory, aim_threads; cache=true) = _create_plan(T, sz, region, direction, normalize, Val(IP), backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
     layout = _map_region(sz, region, _max_dims())
     _is_trivial(layout) && return plan(0, 0)
@@ -355,7 +331,7 @@ end
 Returns the tuned real-to-complex or complex-to-real plan for this configuration.
 """
 function _tuned_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool; zeropad::NTuple{2, Int}=NO_ZEROPAD) where {T <: VkFFTNumber, S <: VkFFTNumber, N, M, B}
-    plan(coalesced_memory, aim_threads) = _create_real_plan(T, S, sz, osz, region, d, direction, normalize, backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads)
+    plan(coalesced_memory, aim_threads; cache=true) = _create_real_plan(T, S, sz, osz, region, d, direction, normalize, backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
     layout = _map_region(direction == FORWARD ? sz : osz, region, _max_dims())
     _is_trivial(layout) && return plan(0, 0)
@@ -372,7 +348,7 @@ end
 Returns the tuned real-to-real plan for this configuration.
 """
 function _tuned_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool) where {T <: VkFFTReal, N, M, IP, B}
-    plan(coalesced_memory, aim_threads) = _create_r2r_plan(T, sz, region, kind, type, direction, normalize, zeropad, Val(IP), backend, device_id, roots; coalesced_memory=coalesced_memory, aim_threads=aim_threads)
+    plan(coalesced_memory, aim_threads; cache=true) = _create_r2r_plan(T, sz, region, kind, type, direction, normalize, zeropad, Val(IP), backend, device_id, roots; coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
     layout = _map_region(sz, region, _max_dims())
     _is_trivial(layout) && return plan(0, 0)

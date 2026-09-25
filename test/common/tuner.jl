@@ -141,6 +141,27 @@ _config_for(dims::Tuple, region::Tuple; kwargs...) = VkFFT._app_config(ComplexF3
         @test _relmax(plain * x, reference) < BACKEND.rtol_f32
     end
 
+    @testset "a sweep leaves the plans a caller holds alone" begin
+        VkFFT.clear_cache!()
+        VkFFT.clear_tuning!()
+
+        x = _upload(_noise(ComplexF32, TUNE_SHAPE))
+        reference = fft(Array(x), (1, 2))
+
+        # Record a grid point other than the defaults, so that tuned and plain
+        # are two distinct plans and the forced sweep passes over at least one.
+        VkFFT.plan_fft(x, (1, 2); tune=true)
+        coalesced_memory, aim_threads = last(filter(entry -> entry[1:2] != (0, 0), VkFFT.last_sweep()))
+        VkFFT._write_record(joinpath(VkFFT.disk_cache_dir(), only(_record_files())), coalesced_memory, aim_threads)
+
+        tuned = VkFFT.plan_fft(x, (1, 2); tune=true)
+        plain = VkFFT.plan_fft(x, (1, 2))
+        VkFFT.plan_fft(x, (1, 2); tune=:force)
+
+        @test _relmax(tuned * x, reference) < BACKEND.rtol_f32
+        @test _relmax(plain * x, reference) < BACKEND.rtol_f32
+    end
+
     @testset "tune reaches the real and real-to-real families" begin
         VkFFT.clear_cache!()
         VkFFT.clear_tuning!()

@@ -108,17 +108,17 @@ function _check_r2r(dims::NTuple{N, Int}, region::NTuple{M, Int}, type::Int, ent
 end
 
 """
-    _create_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; coalesced_memory::Int=0, aim_threads::Int=0)
+    _create_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true)
 
 Returns the cached real-to-real plan for this configuration, creating the VkFFT application if needed.
 """
-function _create_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; coalesced_memory::Int=0, aim_threads::Int=0) where {T <: VkFFTReal, N, M, IP, B}
+function _create_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTReal, N, M, IP, B}
     layout = _map_region(sz, region, _max_dims())
     dct = kind === :dct ? Int32(type) : Int32(0)
     dst = kind === :dst ? Int32(type) : Int32(0)
     key = (B, device_id, T, sz, region, direction, normalize, IP, false, 0, dct, dst, zeropad, coalesced_memory, aim_threads)
 
-    plan = _get_or_create_plan(key) do
+    plan = _get_or_create_plan(key, cache) do
         VkFFTR2RPlan{T, N, IP, B, M}(_create_app(T, layout, direction, normalize, IP, false, backend, roots; dct=dct, dst=dst, zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads), sz, region, kind, type, direction, normalize, zeropad, device_id, roots)
     end
 

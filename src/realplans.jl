@@ -116,15 +116,15 @@ function _check_real_region(dims::NTuple{N, Int}, region::NTuple{M, Int}) where 
 end
 
 """
-    _create_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0)
+    _create_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true)
 
 Returns the cached real plan for this configuration, creating the VkFFT application if needed.
 """
-function _create_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0) where {T <: VkFFTNumber, S <: VkFFTNumber, N, M, B}
+function _create_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTNumber, S <: VkFFTNumber, N, M, B}
     layout = _map_region(direction == FORWARD ? sz : osz, region, _max_dims())
     key = (B, device_id, T, sz, region, direction, normalize, false, true, d, Int32(0), Int32(0), zeropad, coalesced_memory, aim_threads)
 
-    plan = _get_or_create_plan(key) do
+    plan = _get_or_create_plan(key, cache) do
         VkFFTRealPlan{T, S, N, B, M}(_create_app(real(T), layout, direction, normalize, false, true, backend, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads), sz, osz, region, d, direction, normalize, zeropad, device_id, roots)
     end
 
