@@ -27,5 +27,6 @@ using Preferences, VkFFT
 set_preferences!(VkFFT, "libvkfft_path" => "/path/to/libvkfft.so")
 ```
 
-The preference wins over the JLL, so the loader package can stay installed. The
-path is resolved on the first call into the library, not at `using` time.
+The preference applies to the backend the wrapper was built for. The other
+backends keep their JLL. The path is resolved on the first call into the
+library, not at `using` time.

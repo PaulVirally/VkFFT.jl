@@ -51,17 +51,12 @@ VkFFT, whose own defaults are 128 threads everywhere and:
 Each candidate is a real plan of the shape being tuned. Timing runs two
 warmed-up applications, then sizes a repeat count so that one candidate's run
 takes roughly 20 milliseconds, clamped to between 3 and 500 repeats and computed
-once so every candidate is compared over the same amount of work. `mul!`
-synchronizes before it returns, so the host clock measures device time plus one
-synchronization per application. The whole grid is timed twice and each
+once so every candidate is compared over the same amount of work. The clock
+starts and stops on an idle device. The whole grid is timed twice and each
 candidate keeps its faster pass.
 
 The sweep allocates buffers of the plan's own shape and fills them with ones.
 It does not touch the array you passed.
-
-When the sweep finishes, the winner stays in the plan cache and every loser is
-removed from it and freed, so the plan you get back is a cache hit and not a
-seventeenth compilation.
 
 The cost of tuning is one sweep, sixteen plans built and timed, on the first
 call on a shape in the first process.
@@ -75,11 +70,10 @@ with the depot. Use [`VkFFT.disk_cache_dir`](@ref) to see where this scratch
 space is. A record is one file holding a comment line and two integers, named
 for the backend and the first twelve hex digits of its key.
 
-The key covers the backend tag, the `VKFFT_BACKEND` the wrapper was built for,
-the device's cross-process identity, the SHA-256 of the wrapper library itself,
-the configuration size the wrapper reads, and every field of the plan's
-configuration except the two tuning fields. The device identity is the
-human-readable one:
+The key covers the backend tag, the device's cross-process identity, the
+SHA-256 of the wrapper library itself, the configuration size the wrapper
+reads, and every field of the plan's configuration except the two tuning
+fields. The device identity is the human-readable one:
 
 | backend | identity |
 | --- | --- |

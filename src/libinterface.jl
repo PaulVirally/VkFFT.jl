@@ -2,17 +2,20 @@
 # underlying C function.
 
 # The array length baked into vkfft_config. The struct layout depends on it, so
-# it cannot be queried at run time. _ensure_library! checks it against
-# vkfft_max_dims() and errors if they differ.
+# it cannot be queried at run time. _library checks it against vkfft_max_dims()
+# and errors if they differ.
 const VKFFT_MAX_FFT_DIMENSIONS = 12
 
-# Resolved by _ensure_library! before the first ccall. Every @ccall below names
-# it and reads it at call time.
-libvkfft::String = ""
+# The VKFFT_BACKEND value each backend's wrapper is built with.
+const BACKEND_IDS = (cuda=1, opencl=3, metal=5)
 
-# Where a backend extension puts the wrapper path from its JLL. The
-# libvkfft_path preference wins over it.
-const EXTENSION_LIBRARY = Ref("")
+# One wrapper per backend, opened by _library. The slots are fixed because
+# _library reads them without the lock, which finalizers must not take.
+const LIBRARIES = (cuda=Ref(C_NULL), opencl=Ref(C_NULL), metal=Ref(C_NULL))
+
+# Where each backend extension puts the wrapper path from its JLL. A
+# libvkfft_path preference built for the same backend wins over it.
+const EXTENSION_LIBRARIES = (cuda=Ref(""), opencl=Ref(""), metal=Ref(""))
 
 """
     VkFFTConfig
@@ -119,181 +122,122 @@ function VkFFTConfig(; fft_dim::Integer, size::NTuple{VKFFT_MAX_FFT_DIMENSIONS, 
 end
 
 """
-    _vkfft_create(config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}})
+    _vkfft_create(lib::Ptr{Cvoid}, config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}})
 
 Wrapper for the VkFFT C function vkfft_create.
 """
-_vkfft_create(config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}}) = @ccall libvkfft.vkfft_create(config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}})::Cint
+_vkfft_create(lib::Ptr{Cvoid}, config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}}) = @ccall $(dlsym(lib, :vkfft_create))(config::Ref{VkFFTConfig}, handles::Ptr{Ptr{Cvoid}}, app::Ref{Ptr{Cvoid}})::Cint
 
 """
-    _vkfft_execute(app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Integer, stream::Ptr{Cvoid})
+    _vkfft_execute(lib::Ptr{Cvoid}, app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Integer, stream::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_execute.
 """
-_vkfft_execute(app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Integer, stream::Ptr{Cvoid}) = @ccall libvkfft.vkfft_execute(app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Cint, stream::Ptr{Cvoid})::Cint
+_vkfft_execute(lib::Ptr{Cvoid}, app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Integer, stream::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_execute))(app::Ptr{Cvoid}, in::Ptr{Cvoid}, out::Ptr{Cvoid}, direction::Cint, stream::Ptr{Cvoid})::Cint
 
 """
-    _vkfft_set_kernel(app::Ptr{Cvoid}, kernel::Ptr{Cvoid})
+    _vkfft_set_kernel(lib::Ptr{Cvoid}, app::Ptr{Cvoid}, kernel::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_set_kernel.
 """
-_vkfft_set_kernel(app::Ptr{Cvoid}, kernel::Ptr{Cvoid}) = @ccall libvkfft.vkfft_set_kernel(app::Ptr{Cvoid}, kernel::Ptr{Cvoid})::Cint
+_vkfft_set_kernel(lib::Ptr{Cvoid}, app::Ptr{Cvoid}, kernel::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_set_kernel))(app::Ptr{Cvoid}, kernel::Ptr{Cvoid})::Cint
 
 """
-    _vkfft_destroy(app::Ptr{Cvoid})
+    _vkfft_destroy(lib::Ptr{Cvoid}, app::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_destroy.
 """
-_vkfft_destroy(app::Ptr{Cvoid}) = @ccall libvkfft.vkfft_destroy(app::Ptr{Cvoid})::Cvoid
+_vkfft_destroy(lib::Ptr{Cvoid}, app::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_destroy))(app::Ptr{Cvoid})::Cvoid
 
 """
-    _vkfft_error_name(code::Integer)
+    _vkfft_error_name(lib::Ptr{Cvoid}, code::Integer)
 
 Wrapper for the VkFFT C function vkfft_error_name.
 """
-_vkfft_error_name(code::Integer) = unsafe_string(@ccall libvkfft.vkfft_error_name(code::Cint)::Cstring)
+_vkfft_error_name(lib::Ptr{Cvoid}, code::Integer) = unsafe_string(@ccall $(dlsym(lib, :vkfft_error_name))(code::Cint)::Cstring)
 
 """
-    _vkfft_max_dims()
+    _vkfft_max_dims(lib::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_max_dims.
 """
-_vkfft_max_dims() = @ccall libvkfft.vkfft_max_dims()::UInt64
+_vkfft_max_dims(lib::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_max_dims))()::UInt64
 
 """
-    _vkfft_backend()
+    _vkfft_backend(lib::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_backend.
 """
-_vkfft_backend() = @ccall libvkfft.vkfft_backend()::UInt64
+_vkfft_backend(lib::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_backend))()::UInt64
 
 """
-    _vkfft_config_size()
+    _vkfft_config_size(lib::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_config_size.
 """
-_vkfft_config_size() = @ccall libvkfft.vkfft_config_size()::UInt64
+_vkfft_config_size(lib::Ptr{Cvoid}) = @ccall $(dlsym(lib, :vkfft_config_size))()::UInt64
 
 """
-    _vkfft_cuda_toolkit_root()
+    _vkfft_cuda_toolkit_root(lib::Ptr{Cvoid})
 
 Wrapper for the VkFFT C function vkfft_cuda_toolkit_root.
 """
-_vkfft_cuda_toolkit_root() = unsafe_string(@ccall libvkfft.vkfft_cuda_toolkit_root()::Cstring)
+_vkfft_cuda_toolkit_root(lib::Ptr{Cvoid}) = unsafe_string(@ccall $(dlsym(lib, :vkfft_cuda_toolkit_root))()::Cstring)
 
 """
-    _check(code::Integer)
+    _check(lib::Ptr{Cvoid}, code::Integer)
 
 Turns a nonzero VkFFT result code into a `VkFFTError`.
 """
-_check(code::Integer) = iszero(code) ? nothing : throw(VkFFTError(Int(code), _vkfft_error_name(code)))
+_check(lib::Ptr{Cvoid}, code::Integer) = iszero(code) ? nothing : throw(VkFFTError(Int(code), _vkfft_error_name(lib, code)))
 
 const LIBRARY_LOCK = ReentrantLock()
-const LIBRARY_READY = Ref(false)
-const LIBRARY_MAX_DIMS = Ref(0)
-const LIBRARY_BACKEND = Ref(UInt64(0))
-
-# `nothing` means the loaded wrapper does not export vkfft_cuda_toolkit_root,
-# which is a different thing from exporting it and getting an empty path back.
-const LIBRARY_CUDA_TOOLKIT_ROOT = Ref{Union{Nothing, String}}(nothing)
 
 """
-    _ensure_library!()
+    _library(backend::Symbol)
 
-Resolves and ABI-checks libvkfft, once, on the first call that needs the C library.
-
-The path is the `libvkfft_path` preference when it is set, and otherwise
-whatever backend extension loaded. Doing this lazily rather than in `__init__`
-keeps `using VkFFT` (and precompilation) working with no wrapper installed,
-which is what the CPU-only region tests rely on.
+Returns the ABI-checked libvkfft handle for `backend`, opening it on first use.
 """
-function _ensure_library!()
-    LIBRARY_READY[] && return nothing
+function _library(backend::Symbol)
+    slot = LIBRARIES[backend]
+    slot[] == C_NULL || return slot[]
 
-    @lock LIBRARY_LOCK begin
-        LIBRARY_READY[] && return nothing
+    return @lock LIBRARY_LOCK begin
+        slot[] == C_NULL || return slot[]
 
-        global libvkfft = load_preference(@__MODULE__, "libvkfft_path", EXTENSION_LIBRARY[])
-        isempty(libvkfft) && error("VkFFT does not know where libvkfft is. Install the loader package for your backend, or point the libvkfft_path preference at a wrapper you built yourself: `using Preferences; set_preferences!(VkFFT, \"libvkfft_path\" => \"/path/to/libvkfft.so\")`.")
-        isfile(libvkfft) || error("VkFFT resolved libvkfft to \"$libvkfft\", which is not a file. Point it at the wrapper library built for your backend.")
+        path = load_preference(@__MODULE__, "libvkfft_path", "")
+        if isempty(path) || _vkfft_backend(dlopen(path)) != BACKEND_IDS[backend]
+            path = EXTENSION_LIBRARIES[backend][]
+        end
+        isempty(path) && error("VkFFT does not know where the $backend libvkfft is. Load the $backend backend's JLL, or point the libvkfft_path preference at a wrapper you built for $backend: `using Preferences; set_preferences!(VkFFT, \"libvkfft_path\" => \"/path/to/libvkfft.so\")`.")
+        lib = dlopen(path)
 
-        max_dims = Int(_vkfft_max_dims())
-        max_dims == VKFFT_MAX_FFT_DIMENSIONS || error("libvkfft at \"$libvkfft\" was built with VKFFT_MAX_FFT_DIMENSIONS = $max_dims, but VkFFT.jl mirrors vkfft_config with $VKFFT_MAX_FFT_DIMENSIONS slots. Rebuild the wrapper with -DVKFFT_MAX_FFT_DIMENSIONS=$VKFFT_MAX_FFT_DIMENSIONS.")
+        max_dims = Int(_vkfft_max_dims(lib))
+        max_dims == VKFFT_MAX_FFT_DIMENSIONS || error("libvkfft at \"$path\" was built with VKFFT_MAX_FFT_DIMENSIONS = $max_dims, but VkFFT.jl mirrors vkfft_config with $VKFFT_MAX_FFT_DIMENSIONS slots. Rebuild the wrapper with -DVKFFT_MAX_FFT_DIMENSIONS=$VKFFT_MAX_FFT_DIMENSIONS.")
 
         # vkfft_config only ever grows at its end, so a mirror that is short by
         # a field keeps every offset valid and the wrapper reads whatever
         # follows the struct instead. Nothing else notices.
-        config_size = Int(_vkfft_config_size())
-        config_size == sizeof(VkFFTConfig) || error("libvkfft at \"$libvkfft\" reads a $config_size byte vkfft_config, but VkFFT.jl mirrors it as $(sizeof(VkFFTConfig)) bytes. The wrapper and the package are from different versions. Rebuild libvkfft from the vkfft_wrapper.h this VkFFT.jl was written against, or update VkFFT.jl to match the wrapper.")
+        config_size = Int(_vkfft_config_size(lib))
+        config_size == sizeof(VkFFTConfig) || error("libvkfft at \"$path\" reads a $config_size byte vkfft_config, but VkFFT.jl mirrors it as $(sizeof(VkFFTConfig)) bytes. The wrapper and the package are from different versions. Rebuild libvkfft from the vkfft_wrapper.h this VkFFT.jl was written against, or update VkFFT.jl to match the wrapper.")
 
-        LIBRARY_MAX_DIMS[] = max_dims
-        LIBRARY_BACKEND[] = _vkfft_backend()
-
-        # vkfft_cuda_toolkit_root came after the other ten symbols, so a
-        # wrapper built before it exports nothing of the sort and the ccall
-        # raises instead of returning. That is recorded as "unknown" rather
-        # than allowed to fail the load, and every caller then behaves as this
-        # package did before the accessor existed: nothing is refused up front
-        # and VkFFT reports whatever it reports.
-        LIBRARY_CUDA_TOOLKIT_ROOT[] = try
-            _vkfft_cuda_toolkit_root()
-        catch
-            nothing
-        end
-
-        # vkfft_destroy is called from finalizers, i.e., from inside the garbage
-        # collector, and the first ccall to a symbol has to resolve it through
-        # the dynamic loader. Resolve it now instead since destroying a null app
-        # does nothing.
-        _vkfft_destroy(Ptr{Cvoid}(C_NULL))
-
-        LIBRARY_READY[] = true
+        slot[] = lib
     end
-
-    return nothing
 end
 
-"""
-    library_path()
-
-Returns the path of the libvkfft this session resolved.
-
-Resolving happens on the first call, so with neither a `libvkfft_path`
-preference nor a backend extension to supply one this throws the same error as
-planning a transform would.
-
-# Returns
-- The path of the loaded wrapper library
-"""
-function library_path()
-    _ensure_library!()
-    return libvkfft
-end
+_library(::Val{B}) where B = _library(B)
 
 """
-    _max_dims()
+    library_path(backend::Symbol)
 
-Returns the maximum number of VkFFT axes the loaded library supports.
+Returns the path of the libvkfft that plans on `backend` (`:cuda`, `:opencl` or `:metal`) call into.
 """
-function _max_dims()
-    _ensure_library!()
-    return LIBRARY_MAX_DIMS[]
-end
-
-"""
-    _backend_id()
-
-Returns the VKFFT_BACKEND value baked into the loaded library (1 CUDA, 3 OpenCL, 5 Metal).
-"""
-function _backend_id()
-    _ensure_library!()
-    return LIBRARY_BACKEND[]
-end
+library_path(backend::Symbol) = dlpath(_library(backend))
 
 """
     _cuda_toolkit_root()
 
-Returns the CUDA toolkit path baked into the loaded library, or `nothing` when it cannot be asked.
+Returns the CUDA toolkit path baked into the CUDA libvkfft, or `nothing` when it cannot be asked.
 
 An empty string is an answer and means half precision cannot compile on this
 wrapper. `nothing` is the absence of one, from a wrapper predating
@@ -301,6 +245,6 @@ wrapper. `nothing` is the absence of one, from a wrapper predating
 refusal.
 """
 function _cuda_toolkit_root()
-    _ensure_library!()
-    return LIBRARY_CUDA_TOOLKIT_ROOT[]
+    lib = _library(:cuda)
+    return dlsym(lib, :vkfft_cuda_toolkit_root; throw_error=false) === nothing ? nothing : _vkfft_cuda_toolkit_root(lib)
 end

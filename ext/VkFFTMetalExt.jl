@@ -60,7 +60,9 @@ end
 # base of it.
 VkFFT._buffer_handle(x::MtlArray) = _objc_handle(pointer(x).buffer)
 
-VkFFT._synchronize(x::MtlArray) = Metal.synchronize(_queue(x))
+VkFFT._stream(x::MtlArray) = _queue(x)
+
+VkFFT._synchronize(queue::Metal.BatchedCommandQueue) = Metal.synchronize(queue)
 
 VkFFT._device_id(x::MtlArray) = UInt64(UInt(pointer(Metal.device(x))))
 
@@ -112,16 +114,15 @@ function VkFFT._with_execution(f, x::MtlArray)
         command_buffer = MTL.MTLCommandBuffer(queue)
         res = f(_objc_handle(command_buffer))
         MTL.commit!(command_buffer)
-        Metal.synchronize(queue)
         res
     end
 end
 
-# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
-# set, wins over it.
+# The JLL's wrapper is the fallback: a libvkfft_path preference built for this
+# backend wins over it.
 function __init__()
     if VkFFT_Metal_jll.is_available()
-        VkFFT.EXTENSION_LIBRARY[] = VkFFT_Metal_jll.libvkfft
+        VkFFT.EXTENSION_LIBRARIES.metal[] = VkFFT_Metal_jll.libvkfft
     end
 
     return nothing

@@ -24,10 +24,9 @@ const INVERSE = Int32(1)
 # of memory, because handing VkFFT a USM pointer where it wants a cl_mem
 # segfaults inside the driver with no error return.
 #
-# _stream_handle and _synchronize are only for backends that keep the default
-# _with_execution. A backend whose submission handle exists for the length of
-# one application replaces _with_execution instead and never hands out a
-# standing handle.
+# _stream_handle is only for backends that keep the default _with_execution. A
+# backend whose submission handle exists for the length of one application
+# replaces _with_execution instead and never hands out a standing handle.
 
 """
     _backend(::Type{<:AbstractArray})
@@ -61,28 +60,33 @@ Returns the per-call submission handle (an OpenCL queue, a CUDA stream) to run o
 _stream_handle(x::AbstractArray) = throw(ArgumentError("VkFFT cannot find a queue or stream for an array of type $(typeof(x))."))
 
 """
-    _synchronize(x::AbstractArray)
+    _stream(x::AbstractArray)
 
-Waits for work already submitted for this array to finish.
+Returns the queue or stream the current task submits this array's work to.
 """
-_synchronize(x::AbstractArray) = throw(ArgumentError("VkFFT cannot synchronize an array of type $(typeof(x))."))
+_stream(x::AbstractArray) = throw(ArgumentError("VkFFT cannot find a queue or stream for an array of type $(typeof(x))."))
+
+"""
+    _synchronize(stream)
+
+Waits for the work already submitted to a queue or stream from `_stream` to finish.
+"""
+function _synchronize end
 
 """
     _with_execution(f, x::AbstractArray)
 
-Calls `f` with the submission handle to run on and returns its result, once the work is done.
+Calls `f` with the submission handle to run on and returns its result without waiting for the device.
 
 The default is what a backend with a standing queue or stream wants: take the
-handle from `_stream_handle` and wait with `_synchronize`. A backend whose
-handle is instead created per application (a Metal command buffer, which has to
-be made, filled, submitted and waited on inside one scope) replaces this method
-and owns that whole scope. `f` may call `_vkfft_execute` more than once on the
-handle it is given, and those calls run in the order they were made.
+handle from `_stream_handle`. A backend whose handle is instead created per
+application (a Metal command buffer, which has to be made, filled and committed
+inside one scope) replaces this method and owns that whole scope. `f` may call
+`_vkfft_execute` more than once on the handle it is given, and those calls run
+in the order they were made.
 """
 @inline function _with_execution(f, x::AbstractArray)
-    res = f(_stream_handle(x))
-    _synchronize(x) # TODO: relax once the async story across backends is nailed down
-    return res
+    return f(_stream_handle(x))
 end
 
 """
@@ -213,6 +217,7 @@ drops the cache.
 - `device_id::UInt64`: Identity of the device context the plan was built for
 - `roots::Vector{Any}`: Backend objects (context, queue, ...) the app outlives nothing without
 - `lock::ReentrantLock`: Held for the length of one application, because a VkFFT app is not reentrant
+- `stream::Any`: The queue or stream of the last application, `nothing` before the first
 - `destroyed::Bool`: Set by the finalizer so a double destroy is a no-op
 - `pinv::Union{Nothing, VkFFTPlan{T, N, IP, B, M}}`: Cached raw inverse plan
 """
@@ -226,11 +231,12 @@ mutable struct VkFFTPlan{T <: VkFFTComplex, N, IP, B, M} <: AbstractVkFFTPlan{T}
     device_id::UInt64
     roots::Vector{Any} # concrete field type (only ever read by the finalizer, never in mul!)
     lock::ReentrantLock
+    stream::Any
     destroyed::Bool
     pinv::Union{Nothing, VkFFTPlan{T, N, IP, B, M}}
 
     function VkFFTPlan{T, N, IP, B, M}(app::Ptr{Cvoid}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, device_id::UInt64, roots::Vector{Any}) where {T, N, IP, B, M}
-        plan = new{T, N, IP, B, M}(app, sz, region, direction, normalize, zeropad, device_id, roots, ReentrantLock(), false, nothing)
+        plan = new{T, N, IP, B, M}(app, sz, region, direction, normalize, zeropad, device_id, roots, ReentrantLock(), nothing, false, nothing)
         app == C_NULL || finalizer(unsafe_free!, plan)
         return plan
     end
@@ -273,7 +279,7 @@ function unsafe_free!(plan::AbstractVkFFTPlan)
     plan.app = C_NULL
     app == C_NULL && return nothing
     _with_plan_context(_plan_backend(plan), plan.roots) do
-        _vkfft_destroy(app)
+        _vkfft_destroy(_library(_plan_backend(plan)), app)
     end
     return nothing
 end
@@ -296,8 +302,6 @@ const PlanCacheKey = Tuple{Symbol, UInt64, DataType, Tuple{Vararg{Int}}, Tuple{V
 # that callers may still hold, which is not a correctness problem but was a
 # performance one. At ~1.4 MB of host memory per live plan and a handful of
 # distinct shapes per program, bounding it is not yet worth the complexity.
-# TODO: bound it. An evicted plan costs a recompile to get back, so eviction
-# wants a policy better than LRU-by-count before it pays for itself.
 const PLAN_CACHE = Dict{PlanCacheKey, Any}()
 const PLAN_CACHE_LOCK = ReentrantLock()
 
@@ -350,7 +354,7 @@ cache_size() = @lock PLAN_CACHE_LOCK length(PLAN_CACHE)
 Returns the cached complex-to-complex plan for this configuration, creating the VkFFT application if needed.
 """
 function _create_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTComplex, N, M, IP, B}
-    layout = _map_region(sz, region, _max_dims())
+    layout = _map_region(sz, region)
     key = (B, device_id, T, sz, region, direction, normalize, IP, false, 0, Int32(0), Int32(0), zeropad, coalesced_memory, aim_threads)
 
     plan = _get_or_create_plan(key, cache) do
@@ -404,11 +408,12 @@ The one door to `_vkfft_create`. Compiling the kernels is what makes building a
 plan slow, and the plan cache in front of this is what makes re-planning free.
 """
 function _app_from_config(config::VkFFTConfig, backend::Val, roots::Vector{Any})
+    lib = _library(backend)
     app = Ref(Ptr{Cvoid}(C_NULL))
     res = _with_device_handles(roots, backend) do handles
-        _vkfft_create(Ref(config), handles, app)
+        _vkfft_create(lib, Ref(config), handles, app)
     end
-    _check(res)
+    _check(lib, res)
 
     return app[]
 end
@@ -548,17 +553,23 @@ Every `mul!` funnels through here after its own `_check_io` and trivial-plan
 handling. One plan is one VkFFT application, and an application is not
 reentrant: it holds the buffer and stream slots the kernels read their
 arguments from, plus one device-side scratch buffer, all rewritten per
-dispatch. Cached plans are shared across tasks by design, so the lock is what
-makes that safe.
+dispatch. Cached plans are shared across tasks by design. The lock covers the
+host-side slots. The device work outlives the call, so an application on a
+different stream than the last one waits for that stream before it reuses the
+scratch buffer.
 """
 function _apply!(plan::AbstractVkFFTPlan, y::AbstractArray, x::AbstractArray, direction::Int32)
+    lib = _library(_plan_backend(plan))
     @lock plan.lock begin
+        stream = _stream(y)
+        plan.stream === nothing || plan.stream === stream || _synchronize(plan.stream)
+        plan.stream = stream
         res = GC.@preserve x y begin
             _with_execution(y) do stream
-                _vkfft_execute(plan.app, _buffer_handle(x), _buffer_handle(y), direction, stream)
+                _vkfft_execute(lib, plan.app, _buffer_handle(x), _buffer_handle(y), direction, stream)
             end
         end
-        _check(res)
+        _check(lib, res)
     end
 
     return nothing

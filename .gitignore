@@ -103,3 +103,11 @@ tags
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,vim,julia,macos
+
+# Benchmark output
+results/
+benchmarks/figures/
+benchmarks/fftw_wisdom*
+
+# VkFFT needs OpenCL.jl's buffer memory backend on every machine
+!benchmarks/envs/opencl/LocalPreferences.toml

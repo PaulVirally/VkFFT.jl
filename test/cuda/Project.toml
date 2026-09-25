@@ -6,11 +6,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Preferences = "21216c6a-2e73-6563-6e65-726566657250"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 VkFFT = "65dc4606-9ae3-4b78-8734-204937373618"
-# Only makes the JLL resolvable. `using VkFFT_CUDA_jll` in cuda/runtests.jl
-# fires the extension trigger. The wrapper still comes from the libvkfft_path
-# preference the runner sets, which shadows the path the JLL registers.
 VkFFT_CUDA_jll = "c6c0cc47-23fd-51ca-b60c-6f984e788db9"
 
 [compat]

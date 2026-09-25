@@ -3,6 +3,7 @@ module VkFFT
 export VkFFTPlan, VkFFTRealPlan, VkFFTR2RPlan, VkFFTConvPlan, VkFFTUnsafePlan, VkFFTConfig, VkFFTError
 
 using AbstractFFTs
+using Libdl
 using LinearAlgebra
 using PrecompileTools
 using Preferences

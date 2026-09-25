@@ -95,8 +95,9 @@ planning call. See [Do not plan inside an autorelease pool](@ref).
 
 ## Known failures
 
-On pocl, single-precision kernel generation fails at lengths 8191 and 4093. You
-should run these lengths in double precision on pocl.
+On pocl, single precision transforms of length 4093 and 8191 plan without
+error and then crash the process with a bus error, which you cannot catch. Run
+these lengths in double precision on pocl.
 
 The fused convolution is incorrect for a Bluestein axis long enough that VkFFT
 splits it across several uploads. The length at which the split starts depends
@@ -137,18 +138,3 @@ untransformed dimensions many times over, as in transforming every other axis of
 a 25-dimensional array, and the error tells you to permute the array so the
 transformed dimensions sit next to each other. You are extremely unlikely to hit
 this.
-
-## Multiple backends need multiple processes
-
-The C++ VkFFT library chooses its backend when it is compiled. A Julia session
-can only drive one backend, whichever one the loader package you imported brings
-in. Loading `VkFFTCUDA` and `VkFFTMetal` into the same session does not give you
-a process that can do both. This is why this package's own Metal test suite runs
-in a child process. A program that needs two backends needs two processes.
-
-`VKFFT_BACKEND` is 1 for CUDA, 3 for OpenCL and 5 for Metal.
-
-The first call that reaches the C library checks the wrapper's
-`VKFFT_MAX_FFT_DIMENSIONS` and its configuration size against the mirror
-compiled into VkFFT.jl. A wrapper and a package from different versions throws
-an error.

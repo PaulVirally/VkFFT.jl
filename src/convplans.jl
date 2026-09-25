@@ -42,6 +42,7 @@ kernel lives on the device where a cache key cannot cheaply reach it.
 - `device_id::UInt64`: Identity of the device context the plan was built for
 - `roots::Vector{Any}`: Backend objects (context, queue, ...) the app outlives nothing without
 - `lock::ReentrantLock`: Held for the length of one application, because a VkFFT app is not reentrant
+- `stream::Any`: The queue or stream of the last application, `nothing` before the first
 - `destroyed::Bool`: Set by the finalizer so a double destroy is a no-op
 """
 mutable struct VkFFTConvPlan{T <: VkFFTConvComplex, N, B, M} <: AbstractVkFFTPlan{T}
@@ -54,10 +55,11 @@ mutable struct VkFFTConvPlan{T <: VkFFTConvComplex, N, B, M} <: AbstractVkFFTPla
     device_id::UInt64
     roots::Vector{Any} # concrete field type (only ever read by the finalizer, never in mul!)
     lock::ReentrantLock
+    stream::Any
     destroyed::Bool
 
     function VkFFTConvPlan{T, N, B, M}(app::Ptr{Cvoid}, sz::NTuple{N, Int}, region::NTuple{M, Int}, features::Int, correlate::Bool, kernel::Vector{Any}, device_id::UInt64, roots::Vector{Any}) where {T, N, B, M}
-        plan = new{T, N, B, M}(app, sz, region, features, correlate, kernel, device_id, roots, ReentrantLock(), false)
+        plan = new{T, N, B, M}(app, sz, region, features, correlate, kernel, device_id, roots, ReentrantLock(), nothing, false)
         app == C_NULL || finalizer(unsafe_free!, plan)
         return plan
     end
@@ -152,7 +154,7 @@ function _make_conv_plan(x::AbstractArray{T, N}, kernel::AbstractArray, region::
     zeropad == NO_ZEROPAD || throw(ArgumentError("VkFFT.plan_conv does not take zeropad yet. Zero-padding a convolution has never been measured against a reference here, and VkFFT's padded blocks interact with the multiply in the middle of the pipeline in a way nothing in this package pins down. Zero the samples yourself and plan without it."))
 
     sz = size(x)
-    layout = _map_region(sz, region, _max_dims())
+    layout = _map_region(sz, region)
     _check_conv_region(sz, region, layout)
 
     backend = _backend(typeof(x))
@@ -175,6 +177,7 @@ function _make_conv_plan(x::AbstractArray{T, N}, kernel::AbstractArray, region::
     # which is what makes VkFFT skip the internal reorderings whose output the
     # convolution step would not recognize. It transforms the kernel once and
     # is freed, so the plan carries only the buffer.
+    lib = _library(backend)
     kernel_app = _create_app(T, conv, FORWARD, false, false, false, backend, roots; coordinate_features=features, kernel_convolution=true)
     transformed = try
         buffer = similar(kernel)
@@ -182,15 +185,15 @@ function _make_conv_plan(x::AbstractArray{T, N}, kernel::AbstractArray, region::
 
         res = GC.@preserve kernel buffer begin
             _with_execution(buffer) do stream
-                _vkfft_execute(kernel_app, _buffer_handle(kernel), _buffer_handle(buffer), FORWARD, stream)
+                _vkfft_execute(lib, kernel_app, _buffer_handle(kernel), _buffer_handle(buffer), FORWARD, stream)
             end
         end
-        _check(res)
+        _check(lib, res)
 
         buffer
     finally
         _with_plan_context(backend, roots) do
-            _vkfft_destroy(kernel_app)
+            _vkfft_destroy(lib, kernel_app)
         end
     end
 
@@ -220,8 +223,9 @@ function _create_conv_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}
 
     plan = VkFFTConvPlan{T, N, B, M}(app, sz, region, features, correlate, Any[transformed], device_id, roots)
 
-    res = GC.@preserve transformed _vkfft_set_kernel(app, _buffer_handle(transformed))
-    _check(res)
+    lib = _library(B)
+    res = GC.@preserve transformed _vkfft_set_kernel(lib, app, _buffer_handle(transformed))
+    _check(lib, res)
 
     return plan
 end

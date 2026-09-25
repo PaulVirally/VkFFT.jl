@@ -3,64 +3,31 @@
 # The two pure-CPU sets (regions.jl and planner.jl) belong to the OpenCL runner,
 # since neither touches a device.
 #
-# This one is invoked by hand, on a machine with an NVIDIA card and a CUDA build
-# of the wrapper. Once per checkout, from the repository root:
+# This one is invoked by hand, on a machine with an NVIDIA card. Once per
+# checkout, from VkFFT.jl:
 #
-#     ./remote/1_build_wrapper.sh
-#     cd VkFFT.jl
-#     julia --project=test/cuda -e 'using Pkg; Pkg.develop(path=".")'
+#     julia --project=test/cuda -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
 #
-# and then, from VkFFT.jl, against the build remote/1_build_wrapper.sh leaves in
-# libvkfft/build-cuda:
+# and then:
 #
 #     julia --project=test/cuda test/cuda/runtests.jl
 #
-# To run it against any other wrapper, an extracted JLL artifact included, name
-# that wrapper in VKFFT_CUDA_WRAPPER_PATH. That is the variable this runner
-# reads. VKFFT_WRAPPER_PATH is the OpenCL one and does nothing here:
+# The wrapper comes from VkFFT_CUDA_jll. To test one you built, name it in
+# VKFFT_WRAPPER_PATH:
 #
-#     VKFFT_CUDA_WRAPPER_PATH=/path/to/artifact/lib/libvkfft.so \
-#         julia --project=test/cuda test/cuda/runtests.jl
-#
-# An artifact directory is what `VkFFT_CUDA_jll.artifact_dir` reports in a
-# project that has the JLL, and it is also what unpacking the tarball a local
-# Yggdrasil build leaves in products/ gives you. The wrapper is under lib/
-# either way.
-#
-# Setting VKFFT_WRAPPER_PATH or VKFFT_METAL_WRAPPER_PATH here is an error rather
-# than a silent fallback to the local build. See test/wrapper_env.jl for why the
-# three names are distinct.
-#
-# As in the other runners the preference is set here rather than checked in,
-# because the path is absolute and machine-specific.
-include(joinpath(@__DIR__, "..", "wrapper_env.jl"))
-_reject_foreign_wrapper_var("VKFFT_CUDA_WRAPPER_PATH", ["VKFFT_WRAPPER_PATH", "VKFFT_METAL_WRAPPER_PATH"])
-
-using Preferences
-using UUIDs
-
-const VKFFT_DIR = normpath(joinpath(@__DIR__, "..", ".."))
-
-const CUDA_WRAPPER_PATH = get(ENV, "VKFFT_CUDA_WRAPPER_PATH") do
-    # The build remote/1_build_wrapper.sh leaves, whose file name carries a
-    # version suffix, so it is found rather than named.
-    build_dir = normpath(joinpath(VKFFT_DIR, "..", "libvkfft", "build-cuda"))
-    isdir(build_dir) || error("$build_dir does not exist. Run remote/1_build_wrapper.sh first, or set VKFFT_CUDA_WRAPPER_PATH.")
-    candidates = filter(name -> startswith(name, "libvkfft.so"), readdir(build_dir))
-    isempty(candidates) && error("no libvkfft.so* in $build_dir. Run remote/1_build_wrapper.sh first, or set VKFFT_CUDA_WRAPPER_PATH.")
-    joinpath(build_dir, first(sort(candidates)))
-end
-
-set_preferences!(UUID("65dc4606-9ae3-4b78-8734-204937373618"), "libvkfft_path" => CUDA_WRAPPER_PATH; force=true)
-
+#     VKFFT_WRAPPER_PATH=/path/to/libvkfft.so julia --project=test/cuda test/cuda/runtests.jl
 using AbstractFFTs
 using CUDA
 using FFTW
 using LinearAlgebra
+using Preferences
 using Random
 using Test
 using VkFFT
 using VkFFT_CUDA_jll
+
+# `nothing` deletes the preference, so a stale one cannot shadow the JLL.
+set_preferences!(VkFFT, "libvkfft_path" => get(ENV, "VKFFT_WRAPPER_PATH", nothing); force=true)
 
 # The tuner writes its records to disk, so this runner gets a throwaway cache
 # directory for the same reasons the OpenCL one does.
@@ -129,19 +96,20 @@ const COMMON = normpath(joinpath(@__DIR__, "..", "common"))
         # assertions, since every way this testset fails is a question about
         # which library got loaded.
         println("device: ", CUDA.name(CUDA.device()), ", capability: ", CUDA.capability(CUDA.device()))
-        println("wrapper: ", CUDA_WRAPPER_PATH)
+        println("wrapper: ", VkFFT.library_path(:cuda))
         println("cuda toolkit root: ", repr(VkFFT._cuda_toolkit_root()))
 
         # The toolkit root accessor came after the other ten symbols, so a
         # wrapper built before it answers nothing, and `nothing isa String` on
         # its own reads as a type error rather than as a stale library.
         if VkFFT._cuda_toolkit_root() === nothing
-            println("the wrapper at $CUDA_WRAPPER_PATH predates vkfft_cuda_toolkit_root, so its fp16 capability cannot be read off it and the assertion below fails. Rebuild it with remote/1_build_wrapper.sh. The assertion is strict here on purpose, since this runner should be pointed at a current wrapper.")
+            println("the wrapper at $(VkFFT.library_path(:cuda)) predates vkfft_cuda_toolkit_root, so its fp16 capability cannot be read off it and the assertion below fails. Rebuild it with remote/1_build_wrapper.sh. The assertion is strict here on purpose, since this runner should be pointed at a current wrapper.")
         end
 
-        @test VkFFT._max_dims() == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
-        @test VkFFT._backend_id() == 1
-        @test VkFFT._vkfft_config_size() == sizeof(VkFFT.VkFFTConfig)
+        lib = VkFFT._library(:cuda)
+        @test VkFFT._vkfft_max_dims(lib) == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
+        @test VkFFT._vkfft_backend(lib) == 1
+        @test VkFFT._vkfft_config_size(lib) == sizeof(VkFFT.VkFFTConfig)
         @test Base.get_extension(VkFFT, :VkFFTCUDAExt) !== nothing
         @test VkFFT._cuda_toolkit_root() isa String
     end

@@ -1,4 +1,4 @@
-# What only a CUDA process can assert: the layout cases CUDA accepts where the
+# What only CUDA can assert: the layout cases CUDA accepts where the
 # other backends refuse, the context guard, the per-task streams the plan lock
 # exists for, and the half-precision gate, which reads the wrapper rather than
 # the card.

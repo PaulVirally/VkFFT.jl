@@ -1,4 +1,4 @@
-# What only an OpenCL process can assert: the half-precision extension gate and
+# What only OpenCL can assert: the half-precision extension gate and
 # the memory backend the wrapper needs. Both are properties of OpenCL.jl and of
 # the device, so neither has a counterpart on Metal or CUDA.
 

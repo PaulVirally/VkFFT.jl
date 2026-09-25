@@ -24,9 +24,8 @@ const TUNE_COALESCED_MEMORY = (0, 32, 64, 128)
 const TUNE_AIM_THREADS = (0, 64, 128, 256)
 
 # Two applications to warm up, then as many as fit in roughly this much wall
-# clock. mul! synchronizes, so this is device time plus one synchronization per
-# application, and the bounds keep a huge transform from being timed once and a
-# tiny one from being timed forever.
+# clock. The bounds keep a huge transform from being timed once and a tiny one
+# from being timed forever.
 const TUNE_WARMUP = 2
 const TUNE_TARGET_NS = 20_000_000
 const TUNE_MIN_REPEATS = 3
@@ -210,17 +209,20 @@ _tuning_input(prototype::AbstractArray) = fill!(similar(prototype), one(eltype(p
 
 Returns the nanoseconds `repeats` warmed-up applications of `plan` take.
 
-`mul!` synchronizes before it returns, so the host clock around a run of them
-measures device time plus one synchronization per application, which is why there
-is no event or profiler machinery here. The warmup and the repeat count are what
-the measurement rests on: a clock around one unwarmed application would time an
-asynchronous launch and a first-touch page fault instead of a transform.
+`mul!` returns before the device is done, so the run is bracketed by two waits:
+the first keeps earlier work off the clock and the second puts all of this run
+on it. The warmup and the repeat count are what the measurement rests on: a
+clock around one unwarmed application would time a first-touch page fault
+instead of a transform.
 """
 function _time_applications(plan::AbstractVkFFTPlan, y::AbstractArray, x::AbstractArray, repeats::Int)
+    stream = _stream(y)
+    _synchronize(stream)
     start = time_ns()
     for _ in 1:repeats
         mul!(y, plan, x)
     end
+    _synchronize(stream)
 
     return time_ns() - start
 end
@@ -316,7 +318,7 @@ Returns the tuned complex-to-complex plan for this configuration.
 function _tuned_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, direction::Int32, normalize::Bool, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool; zeropad::NTuple{2, Int}=NO_ZEROPAD) where {T <: VkFFTComplex, N, M, IP, B}
     plan(coalesced_memory, aim_threads; cache=true) = _create_plan(T, sz, region, direction, normalize, Val(IP), backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
-    layout = _map_region(sz, region, _max_dims())
+    layout = _map_region(sz, region)
     _is_trivial(layout) && return plan(0, 0)
 
     config = _app_config(T, layout, direction, normalize, IP, false; zeropad=zeropad)
@@ -333,7 +335,7 @@ Returns the tuned real-to-complex or complex-to-real plan for this configuration
 function _tuned_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool; zeropad::NTuple{2, Int}=NO_ZEROPAD) where {T <: VkFFTNumber, S <: VkFFTNumber, N, M, B}
     plan(coalesced_memory, aim_threads; cache=true) = _create_real_plan(T, S, sz, osz, region, d, direction, normalize, backend, device_id, roots; zeropad=zeropad, coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
-    layout = _map_region(direction == FORWARD ? sz : osz, region, _max_dims())
+    layout = _map_region(direction == FORWARD ? sz : osz, region)
     _is_trivial(layout) && return plan(0, 0)
 
     config = _app_config(real(T), layout, direction, normalize, false, true; zeropad=zeropad)
@@ -350,7 +352,7 @@ Returns the tuned real-to-real plan for this configuration.
 function _tuned_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}, prototype::AbstractArray, force::Bool) where {T <: VkFFTReal, N, M, IP, B}
     plan(coalesced_memory, aim_threads; cache=true) = _create_r2r_plan(T, sz, region, kind, type, direction, normalize, zeropad, Val(IP), backend, device_id, roots; coalesced_memory=coalesced_memory, aim_threads=aim_threads, cache=cache)
 
-    layout = _map_region(sz, region, _max_dims())
+    layout = _map_region(sz, region)
     _is_trivial(layout) && return plan(0, 0)
 
     dct = kind === :dct ? Int32(type) : Int32(0)

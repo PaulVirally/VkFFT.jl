@@ -41,6 +41,7 @@ Plans are cached and reused, as `VkFFT.plan_fft`'s are.
 - `device_id::UInt64`: Identity of the device context the plan was built for
 - `roots::Vector{Any}`: Backend objects (context, queue, ...) the app outlives nothing without
 - `lock::ReentrantLock`: Held for the length of one application, because a VkFFT app is not reentrant
+- `stream::Any`: The queue or stream of the last application, `nothing` before the first
 - `destroyed::Bool`: Set by the finalizer so a double destroy is a no-op
 - `pinv::Union{Nothing, VkFFTRealPlan{S, T, N, B, M}}`: Cached raw inverse plan
 """
@@ -56,11 +57,12 @@ mutable struct VkFFTRealPlan{T <: VkFFTNumber, S <: VkFFTNumber, N, B, M} <: Abs
     device_id::UInt64
     roots::Vector{Any} # concrete field type (only ever read by the finalizer, never in mul!)
     lock::ReentrantLock
+    stream::Any
     destroyed::Bool
     pinv::Union{Nothing, VkFFTRealPlan{S, T, N, B, M}}
 
     function VkFFTRealPlan{T, S, N, B, M}(app::Ptr{Cvoid}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, device_id::UInt64, roots::Vector{Any}) where {T, S, N, B, M}
-        plan = new{T, S, N, B, M}(app, sz, osz, region, d, direction, normalize, zeropad, device_id, roots, ReentrantLock(), false, nothing)
+        plan = new{T, S, N, B, M}(app, sz, osz, region, d, direction, normalize, zeropad, device_id, roots, ReentrantLock(), nothing, false, nothing)
         app == C_NULL || finalizer(unsafe_free!, plan)
         return plan
     end
@@ -121,7 +123,7 @@ end
 Returns the cached real plan for this configuration, creating the VkFFT application if needed.
 """
 function _create_real_plan(::Type{T}, ::Type{S}, sz::NTuple{N, Int}, osz::NTuple{N, Int}, region::NTuple{M, Int}, d::Int, direction::Int32, normalize::Bool, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; zeropad::NTuple{2, Int}=NO_ZEROPAD, coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTNumber, S <: VkFFTNumber, N, M, B}
-    layout = _map_region(direction == FORWARD ? sz : osz, region, _max_dims())
+    layout = _map_region(direction == FORWARD ? sz : osz, region)
     key = (B, device_id, T, sz, region, direction, normalize, false, true, d, Int32(0), Int32(0), zeropad, coalesced_memory, aim_threads)
 
     plan = _get_or_create_plan(key, cache) do

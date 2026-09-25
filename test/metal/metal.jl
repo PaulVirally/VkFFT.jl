@@ -1,4 +1,4 @@
-# What only a Metal process can assert: the refusal of Float64, the reshape
+# What only Metal can assert: the refusal of Float64, the reshape
 # positive control on an offset view, and the two command-buffer lifetimes the
 # wrapper's autorelease and flush behaviour rest on.
 
@@ -77,9 +77,9 @@
 
         res = GC.@preserve x32 y32 z32 begin
             VkFFT._with_execution(z32) do stream
-                first = VkFFT._vkfft_execute(forward.app, VkFFT._buffer_handle(x32), VkFFT._buffer_handle(y32), forward.direction, stream)
+                first = VkFFT._vkfft_execute(VkFFT._library(:metal), forward.app, VkFFT._buffer_handle(x32), VkFFT._buffer_handle(y32), forward.direction, stream)
                 first == 0 || return first
-                VkFFT._vkfft_execute(inverse.app, VkFFT._buffer_handle(y32), VkFFT._buffer_handle(z32), inverse.direction, stream)
+                VkFFT._vkfft_execute(VkFFT._library(:metal), inverse.app, VkFFT._buffer_handle(y32), VkFFT._buffer_handle(z32), inverse.direction, stream)
             end
         end
         @test res == 0

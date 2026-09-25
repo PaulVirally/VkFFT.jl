@@ -1,6 +1,6 @@
 # Everything the planner refuses, or computes, without a device: every case here
 # takes a host `Array`, which has no backend at all, or calls a pure function
-# directly. None of it can differ between an OpenCL, a Metal and a CUDA process,
+# directly. None of it can differ between OpenCL, Metal and CUDA,
 # so the OpenCL runner is the only one that includes it. The refusals that do
 # need a device array live with their family.
 
@@ -11,10 +11,11 @@
 
         # The name comes from VkFFT's own getVkFFTErrorString, never from a
         # table in Julia.
-        @test VkFFT._vkfft_error_name(0) == "VKFFT_SUCCESS"
-        @test VkFFT._vkfft_error_name(3005) == "VKFFT_ERROR_UNSUPPORTED_FFT_OMIT"
-        @test VkFFT._check(0) === nothing
-        @test_throws VkFFTError VkFFT._check(3005)
+        lib = VkFFT._library(BACKEND.name)
+        @test VkFFT._vkfft_error_name(lib, 0) == "VKFFT_SUCCESS"
+        @test VkFFT._vkfft_error_name(lib, 3005) == "VKFFT_ERROR_UNSUPPORTED_FFT_OMIT"
+        @test VkFFT._check(lib, 0) === nothing
+        @test_throws VkFFTError VkFFT._check(lib, 3005)
     end
 
     @testset "unsupported element types" begin

@@ -20,7 +20,7 @@
         @test isconcretetype(typeof(plan))
         @test typeof(plan) === VkFFTPlan{WIDE_COMPLEX, 3, false, BACKEND.name, 2}
         @test typeof(VkFFT.plan_fft!(x, (1, 3))) === VkFFTPlan{WIDE_COMPLEX, 3, true, BACKEND.name, 2}
-        @test all(isconcretetype, fieldtypes(typeof(plan))[1:(end - 1)])
+        @test all(f -> f in (:stream, :pinv) || isconcretetype(fieldtype(typeof(plan), f)), fieldnames(typeof(plan)))
         @test fieldtype(typeof(plan), :pinv) === Union{Nothing, typeof(plan)}
     end
 

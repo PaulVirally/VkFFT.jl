@@ -229,7 +229,7 @@ _conv_ref(h, k, region) = ifft(fft(h, region) .* fft(k, region), region)
 
         @test typeof(plan) === VkFFTConvPlan{WIDE_COMPLEX, 2, BACKEND.name, 2}
         @test isconcretetype(typeof(plan))
-        @test all(isconcretetype, fieldtypes(typeof(plan)))
+        @test all(f -> f === :stream || isconcretetype(fieldtype(typeof(plan), f)), fieldnames(typeof(plan)))
 
         @test (@inferred plan * x) isa DeviceArray{WIDE_COMPLEX, 2}
         @test (@inferred mul!(similar(x), plan, x)) isa DeviceArray{WIDE_COMPLEX, 2}

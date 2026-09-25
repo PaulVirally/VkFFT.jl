@@ -4,7 +4,10 @@ using CUDA
 using VkFFT
 using VkFFT_CUDA_jll
 
-import CUDA: CuArray, CuContext, CuDevice, DenseCuArray
+import CUDA: CuArray, CuContext, CuDevice, CuStream, DenseCuArray
+
+# The raw driver call moved into CUDACore with CUDA.jl 6.
+const cuCtxSynchronize = isdefined(CUDA, :CUDACore) ? CUDA.CUDACore.cuCtxSynchronize : CUDA.cuCtxSynchronize
 
 # CUDA.jl represents every contiguous view, reshape and reinterpret of a CuArray
 # as another CuArray carrying a byte offset, so DenseCuArray is an alias for
@@ -48,7 +51,9 @@ VkFFT._buffer_handle(x::DenseCuArray) = reinterpret(Ptr{Cvoid}, pointer(x))
 
 VkFFT._stream_handle(::DenseCuArray) = convert(Ptr{Cvoid}, CUDA.stream().handle)
 
-VkFFT._synchronize(::DenseCuArray) = CUDA.synchronize()
+VkFFT._stream(::DenseCuArray) = CUDA.stream()
+
+VkFFT._synchronize(stream::CuStream) = CUDA.synchronize(stream)
 
 # The context handle alone is not enough. CUDA.jl keeps a unique id per context
 # because a destroyed context's handle can come back for a new one, and a cache
@@ -102,23 +107,30 @@ end
 # with a skip_destroyed keyword, CUDA.jl 6 with a function that is not in the
 # CUDA namespace). A destroyed context has already freed everything the app
 # owned, so there is nothing left to do.
+#
+# mul! does not wait for the device, so the app's kernels may still be running,
+# and freeing it unloads them. The raw cuCtxSynchronize blocks without yielding.
+# CUDA.device_synchronize would not do, since it can run the garbage collector.
 function VkFFT._with_plan_context(f, ::Val{:cuda}, roots::Vector{Any})
     context = roots[2]::CuContext
     try
-        CUDA.context!(f, context)
+        CUDA.context!(context) do
+            cuCtxSynchronize()
+            f()
+        end
     catch
     end
 
     return nothing
 end
 
-# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
-# set, wins over it. A JLL that is unavailable but tagged "cuda: none" was
+# The JLL's wrapper is the fallback: a libvkfft_path preference built for this
+# backend wins over it. A JLL that is unavailable but tagged "cuda: none" was
 # precompiled where no driver was visible, so the tag is stale rather than a
 # statement about this machine.
 function __init__()
     if VkFFT_CUDA_jll.is_available()
-        VkFFT.EXTENSION_LIBRARY[] = VkFFT_CUDA_jll.libvkfft
+        VkFFT.EXTENSION_LIBRARIES.cuda[] = VkFFT_CUDA_jll.libvkfft
     elseif VkFFT_CUDA_jll.host_platform["cuda"] == "none"
         @error """
     VkFFT_CUDA_jll was precompiled without an NVIDIA driver present. This can

@@ -47,7 +47,9 @@ VkFFT._buffer_handle(x::CLBufferArray) = convert(Ptr{Cvoid}, Base.unsafe_convert
 
 VkFFT._stream_handle(x::CLArray) = convert(Ptr{Cvoid}, Base.unsafe_convert(cl.cl_command_queue, cl.queue()))
 
-VkFFT._synchronize(x::CLArray) = cl.finish(cl.queue())
+VkFFT._stream(::CLArray) = cl.queue()
+
+VkFFT._synchronize(queue::cl.CmdQueue) = cl.finish(queue)
 
 VkFFT._device_id(x::CLArray) = UInt64(reinterpret(UInt, Base.unsafe_convert(cl.cl_context, cl.context(x.data[].mem))))
 
@@ -86,11 +88,11 @@ function VkFFT._with_device_handles(f, roots::Vector{Any}, ::Val{:opencl})
     end
 end
 
-# The JLL's wrapper is the fallback: a libvkfft_path preference, when one is
-# set, wins over it.
+# The JLL's wrapper is the fallback: a libvkfft_path preference built for this
+# backend wins over it.
 function __init__()
     if VkFFT_OpenCL_jll.is_available()
-        VkFFT.EXTENSION_LIBRARY[] = VkFFT_OpenCL_jll.libvkfft
+        VkFFT.EXTENSION_LIBRARIES.opencl[] = VkFFT_OpenCL_jll.libvkfft
     end
 
     return nothing

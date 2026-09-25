@@ -2,13 +2,6 @@
 # VkFFTMetal. That is the whole point: `using VkFFTMetal` has to activate the
 # Metal extension and give a working plan with nothing else loaded, which is why
 # there is no FFTW here and the ground truth is analytic.
-include("env.jl")
-
-using Preferences
-using UUIDs
-
-set_preferences!(UUID("65dc4606-9ae3-4b78-8734-204937373618"), "libvkfft_path" => METAL_WRAPPER_PATH; force=true)
-
 using LinearAlgebra
 using VkFFTMetal
 
@@ -34,7 +27,7 @@ batch = 4
 # a host array.
 check("Metal extension active", Base.get_extension(VkFFT, :VkFFTMetalExt) !== nothing)
 check("backend tag", VkFFT._backend(typeof(MtlArray{ComplexF32}(undef, n))) === Val(:metal))
-check("Metal wrapper", VkFFT._backend_id() == 5)
+check("Metal wrapper", VkFFT._vkfft_backend(VkFFT._library(:metal)) == 5)
 
 # The transform of a delta is flat, and its inverse brings the delta back. No
 # FFTW needed to say whether that happened.

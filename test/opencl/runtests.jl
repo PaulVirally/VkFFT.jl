@@ -4,37 +4,14 @@
 # planner.jl and aqua.jl, since none of them touches a device and running them
 # once per backend would give the same answer three times.
 #
-# The libvkfft_path preference is set here rather than checked into
-# test/LocalPreferences.toml, because the wrapper path is absolute and
-# machine-specific. VkFFT reads the preference on the first call that needs the
-# C library, so setting it in-process is enough. Override it with
-# VKFFT_WRAPPER_PATH to test another build:
-#
-#     VKFFT_WRAPPER_PATH=/path/to/artifact/lib/libvkfft_icd.dylib \
-#         julia --project=test -e 'using Pkg; Pkg.test()'
-#
-# VKFFT_CUDA_WRAPPER_PATH is the CUDA runner's variable and does nothing here,
-# so setting it is an error rather than a silent fallback to the default
-# wrapper. See test/wrapper_env.jl. VKFFT_METAL_WRAPPER_PATH is not an error,
-# because the Metal child is spawned from this process and one run can point
-# each half at a different build.
-#
-# The wrapper must be the ICD-linked build: Apple's OpenCL framework is not an
-# ICD, so a wrapper linked straight against it is invisible to OpenCL.jl's
-# loader and every create call comes back as
-# VKFFT_ERROR_FAILED_TO_GET_ATTRIBUTE.
-include(joinpath(@__DIR__, "..", "wrapper_env.jl"))
-_reject_foreign_wrapper_var("VKFFT_WRAPPER_PATH", ["VKFFT_CUDA_WRAPPER_PATH"])
-
+# A local OpenCL wrapper passed in VKFFT_WRAPPER_PATH must be the ICD-linked
+# build: Apple's OpenCL framework is not an ICD, so a wrapper linked straight
+# against it is invisible to OpenCL.jl's loader and every create call comes back
+# as VKFFT_ERROR_FAILED_TO_GET_ATTRIBUTE.
 using Preferences
 using UUIDs
 
-const VKFFT_UUID = UUID("65dc4606-9ae3-4b78-8734-204937373618")
-const OPENCL_UUID = UUID("08131aa3-fb12-5dee-8b74-c09406e224a2")
-const WRAPPER_PATH = get(ENV, "VKFFT_WRAPPER_PATH", normpath(joinpath(@__DIR__, "..", "..", "..", "probes", "build-icd", "libvkfft_icd.dylib")))
-
-set_preferences!(VKFFT_UUID, "libvkfft_path" => WRAPPER_PATH; force=true)
-set_preferences!(OPENCL_UUID, "default_memory_backend" => "buffer"; force=true)
+set_preferences!(UUID("08131aa3-fb12-5dee-8b74-c09406e224a2"), "default_memory_backend" => "buffer"; force=true)
 
 using AbstractFFTs
 using Aqua
@@ -103,18 +80,18 @@ const COMMON = normpath(joinpath(@__DIR__, "..", "common"))
 
 @testset verbose = true "opencl" begin
     @testset "library" begin
-        @test VkFFT._max_dims() == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
-        @test VkFFT._backend_id() == 3
-        @test VkFFT._vkfft_config_size() == sizeof(VkFFT.VkFFTConfig)
+        lib = VkFFT._library(:opencl)
+        @test VkFFT._vkfft_max_dims(lib) == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
+        @test VkFFT._vkfft_backend(lib) == 3
+        @test VkFFT._vkfft_config_size(lib) == sizeof(VkFFT.VkFFTConfig)
         @test Base.get_extension(VkFFT, :VkFFTOpenCLExt) !== nothing
 
         # The eleventh symbol. Only a CUDA build ever bakes a path, so this
         # one reports the empty string, and the point of the assertion is that
         # the accessor answers at all rather than raising.
-        @test VkFFT._vkfft_cuda_toolkit_root() isa String
-        @test VkFFT._cuda_toolkit_root() == ""
+        @test VkFFT._vkfft_cuda_toolkit_root(lib) == ""
         println("platform: ", cl.platform().name, ", device: ", cl.device().name)
-        println("wrapper: ", WRAPPER_PATH)
+        println("wrapper: ", VkFFT.library_path(:opencl))
     end
 
     include(joinpath(COMMON, "harness.jl"))

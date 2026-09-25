@@ -19,7 +19,7 @@ _record_files() = filter(name -> startswith(name, "tune_"), readdir(VkFFT.disk_c
 
 Returns the `VkFFTConfig` a plain forward c2c plan of this shape would be built from.
 """
-_config_for(dims::Tuple, region::Tuple; kwargs...) = VkFFT._app_config(ComplexF32, VkFFT._map_region(dims, region, VkFFT._max_dims()), VkFFT.FORWARD, false, false, false; kwargs...)
+_config_for(dims::Tuple, region::Tuple; kwargs...) = VkFFT._app_config(ComplexF32, VkFFT._map_region(dims, region), VkFFT.FORWARD, false, false, false; kwargs...)
 
 @testset verbose = true "autotuner" begin
     @testset "the disk key" begin
@@ -29,9 +29,9 @@ _config_for(dims::Tuple, region::Tuple; kwargs...) = VkFFT._app_config(ComplexF3
         @test key == VkFFT._device_key(VkFFT._device_roots(_upload(_noise(ComplexF32, (16,)))), Val(BACKEND.name)) # stable within a session
         @test occursin(BACKEND.device_name, key)
 
-        digest = VkFFT._library_digest()
+        digest = VkFFT._library_digest(BACKEND.name)
         @test length(digest) == 64
-        @test digest == VkFFT._library_digest() # computed once, kept
+        @test digest == VkFFT._library_digest(BACKEND.name) # computed once, kept
 
         base = _config_for((64, 4), (1, 2))
         record(config) = VkFFT._disk_key(config, roots, Val(BACKEND.name))

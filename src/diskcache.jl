@@ -23,30 +23,19 @@ _device_key(roots::Vector{Any}, backend::Val) = throw(ArgumentError("VkFFT has n
 
 # The wrapper library's own contents, which pin the VkFFT version and the
 # wrapper build together. Hashing a multi-megabyte file is not something to do
-# per plan, and the path is fixed for the session once _ensure_library!
-# resolves it, so it is done once.
-const LIBRARY_DIGEST = Ref("")
+# per plan, so it is done once per backend.
+const LIBRARY_DIGESTS = Dict{Symbol, String}()
 
 """
-    _library_digest()
+    _library_digest(backend::Symbol)
 
-Returns the SHA-256 of the loaded libvkfft, computed on first use and kept for the session.
+Returns the SHA-256 of the backend's libvkfft, computed on first use and kept for the session.
 
 This is what makes a record tuned under one VkFFT version miss under another.
 A new VkFFT can lay the same transform out differently, and nothing else in
 the key would notice the upgrade.
 """
-function _library_digest()
-    isempty(LIBRARY_DIGEST[]) || return LIBRARY_DIGEST[]
-
-    _ensure_library!()
-    @lock LIBRARY_LOCK begin
-        isempty(LIBRARY_DIGEST[]) || return LIBRARY_DIGEST[]
-        LIBRARY_DIGEST[] = bytes2hex(open(SHA.sha256, libvkfft))
-    end
-
-    return LIBRARY_DIGEST[]
-end
+_library_digest(backend::Symbol) = @lock LIBRARY_LOCK get!(() -> bytes2hex(open(SHA.sha256, library_path(backend))), LIBRARY_DIGESTS, backend)
 
 # Where the tuning fields sit in VkFFTConfig, so that the record key can leave
 # them out without anything hardcoding a field number.
@@ -59,16 +48,16 @@ const CONFIG_AIM_THREADS = findfirst(==(:aim_threads), fieldnames(VkFFTConfig))
 Returns the hex SHA-256 the tuning record for this configuration is filed under.
 
 The digest covers everything that can move the tuned optimum or make a stored
-answer stale: the backend tag and the wrapper's own `VKFFT_BACKEND`, the
-device identity, the wrapper library's contents (which pin the VkFFT version),
-`sizeof(vkfft_config)` as the wrapper reads it, and every field of the
-configuration except the two tuning fields, which enter as zero. The record's
-whole content is the values those fields should take, so they cannot also be
-part of its own key. A record left behind by a VkFFT upgrade misses rather
-than applies, which is why the library contents are in here.
+answer stale: the backend tag, the device identity, the wrapper library's
+contents (which pin the VkFFT version), `sizeof(vkfft_config)` as the wrapper
+reads it, and every field of the configuration except the two tuning fields,
+which enter as zero. The record's whole content is the values those fields
+should take, so they cannot also be part of its own key. A record left behind
+by a VkFFT upgrade misses rather than applies, which is why the library
+contents are in here.
 """
 function _disk_key(config::VkFFTConfig, roots::Vector{Any}, backend::Val{B}) where B
-    parts = Any[string(B), _device_key(roots, backend), _library_digest(), _backend_id(), _vkfft_config_size()]
+    parts = Any[string(B), _device_key(roots, backend), _library_digest(B), _vkfft_config_size(_library(B))]
 
     for i in 1:fieldcount(VkFFTConfig)
         if i == CONFIG_COALESCED_MEMORY || i == CONFIG_AIM_THREADS

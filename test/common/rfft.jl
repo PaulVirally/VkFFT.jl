@@ -98,7 +98,7 @@ end
 
         @test isconcretetype(typeof(plan))
         @test typeof(plan) === VkFFTRealPlan{WIDE_REAL, Complex{WIDE_REAL}, 3, BACKEND.name, 2}
-        @test all(isconcretetype, fieldtypes(typeof(plan))[1:(end - 1)])
+        @test all(f -> f in (:stream, :pinv) || isconcretetype(fieldtype(typeof(plan), f)), fieldnames(typeof(plan)))
         @test fieldtype(typeof(plan), :pinv) === Union{Nothing, VkFFTRealPlan{Complex{WIDE_REAL}, WIDE_REAL, 3, BACKEND.name, 2}}
 
         inverse = VkFFT.plan_irfft(y564, 8, (1, 3))

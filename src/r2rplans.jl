@@ -41,6 +41,7 @@ Plans are cached and reused, as `VkFFT.plan_fft`'s are.
 - `device_id::UInt64`: Identity of the device context the plan was built for
 - `roots::Vector{Any}`: Backend objects (context, queue, ...) the app outlives nothing without
 - `lock::ReentrantLock`: Held for the length of one application, because a VkFFT app is not reentrant
+- `stream::Any`: The queue or stream of the last application, `nothing` before the first
 - `destroyed::Bool`: Set by the finalizer so a double destroy is a no-op
 - `pinv::Union{Nothing, VkFFTR2RPlan{T, N, IP, B, M}}`: Cached raw inverse plan
 """
@@ -56,11 +57,12 @@ mutable struct VkFFTR2RPlan{T <: VkFFTReal, N, IP, B, M} <: AbstractVkFFTPlan{T}
     device_id::UInt64
     roots::Vector{Any} # concrete field type (only ever read by the finalizer, never in mul!)
     lock::ReentrantLock
+    stream::Any
     destroyed::Bool
     pinv::Union{Nothing, VkFFTR2RPlan{T, N, IP, B, M}}
 
     function VkFFTR2RPlan{T, N, IP, B, M}(app::Ptr{Cvoid}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, device_id::UInt64, roots::Vector{Any}) where {T, N, IP, B, M}
-        plan = new{T, N, IP, B, M}(app, sz, region, kind, type, direction, normalize, zeropad, device_id, roots, ReentrantLock(), false, nothing)
+        plan = new{T, N, IP, B, M}(app, sz, region, kind, type, direction, normalize, zeropad, device_id, roots, ReentrantLock(), nothing, false, nothing)
         app == C_NULL || finalizer(unsafe_free!, plan)
         return plan
     end
@@ -113,7 +115,7 @@ end
 Returns the cached real-to-real plan for this configuration, creating the VkFFT application if needed.
 """
 function _create_r2r_plan(::Type{T}, sz::NTuple{N, Int}, region::NTuple{M, Int}, kind::Symbol, type::Int, direction::Int32, normalize::Bool, zeropad::NTuple{2, Int}, ::Val{IP}, backend::Val{B}, device_id::UInt64, roots::Vector{Any}; coalesced_memory::Int=0, aim_threads::Int=0, cache::Bool=true) where {T <: VkFFTReal, N, M, IP, B}
-    layout = _map_region(sz, region, _max_dims())
+    layout = _map_region(sz, region)
     dct = kind === :dct ? Int32(type) : Int32(0)
     dst = kind === :dst ? Int32(type) : Int32(0)
     key = (B, device_id, T, sz, region, direction, normalize, IP, false, 0, dct, dst, zeropad, coalesced_memory, aim_threads)

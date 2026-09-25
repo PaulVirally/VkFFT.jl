@@ -31,6 +31,7 @@ two VkFFT applications.
 - `device_id::UInt64`: Identity of the device context the plan was built for
 - `roots::Vector{Any}`: Backend objects (context, queue, ...) the app outlives nothing without
 - `lock::ReentrantLock`: Held for the length of one application, because a VkFFT app is not reentrant
+- `stream::Any`: The queue or stream of the last application, `nothing` before the first
 - `destroyed::Bool`: Set by the finalizer so a double destroy is a no-op
 """
 mutable struct VkFFTUnsafePlan{T, S, N, M, B} <: AbstractVkFFTPlan{T}
@@ -42,10 +43,11 @@ mutable struct VkFFTUnsafePlan{T, S, N, M, B} <: AbstractVkFFTPlan{T}
     device_id::UInt64
     roots::Vector{Any} # concrete field type (only ever read by the finalizer, never in mul!)
     lock::ReentrantLock
+    stream::Any
     destroyed::Bool
 
     function VkFFTUnsafePlan{T, S, N, M, B}(app::Ptr{Cvoid}, sz::NTuple{N, Int}, osz::NTuple{M, Int}, direction::Int32, inplace::Bool, device_id::UInt64, roots::Vector{Any}) where {T, S, N, M, B}
-        plan = new{T, S, N, M, B}(app, sz, osz, direction, inplace, device_id, roots, ReentrantLock(), false)
+        plan = new{T, S, N, M, B}(app, sz, osz, direction, inplace, device_id, roots, ReentrantLock(), nothing, false)
         app == C_NULL || finalizer(unsafe_free!, plan)
         return plan
     end
@@ -148,8 +150,6 @@ function unsafe_plan(config::VkFFTConfig, in_prototype::AbstractArray, out_proto
     if config.inplace != 0
         eltype(in_prototype) === eltype(out_prototype) && size(in_prototype) == size(out_prototype) || throw(ArgumentError("a config with inplace = 1 transforms one buffer, so both prototypes have to have the same element type and size. Got $(eltype(in_prototype)) of size $(size(in_prototype)) and $(eltype(out_prototype)) of size $(size(out_prototype)). Pass the same array twice."))
     end
-
-    _ensure_library!()
 
     return _create_unsafe_plan(config, in_prototype, out_prototype, dir, backend)
 end

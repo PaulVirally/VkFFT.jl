@@ -223,7 +223,7 @@ end
         @test AbstractFFTs.output_size(plan) == (16, 4)
         @test ndims(plan) == 2
         @test isconcretetype(typeof(plan))
-        @test all(isconcretetype, fieldtypes(typeof(plan)))
+        @test all(f -> f === :stream || isconcretetype(fieldtype(typeof(plan), f)), fieldnames(typeof(plan)))
 
         @test_throws ArgumentError AbstractFFTs.fftdims(plan)
         @test_throws ArgumentError inv(plan)

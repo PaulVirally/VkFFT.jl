@@ -2,22 +2,7 @@
 # device array type, then includes the backend-parameterized sets in common/.
 # The two pure-CPU sets (regions.jl and planner.jl) belong to the OpenCL runner,
 # since neither touches a device.
-#
-# gate.jl spawns this in a project of its own (see env.jl for why it cannot be
-# the same process), and it is runnable by hand in any project that has VkFFT,
-# Metal, VkFFT_Metal_jll and FFTW:
-#
-#     julia --project=<that project> VkFFT.jl/test/metal/runtests.jl
-#
-# The wrapper it loads is the Metal build, from VKFFT_METAL_WRAPPER_PATH or the
-# in-tree default. As in the OpenCL runner the preference is set here rather
-# than checked in, because the path is absolute and machine-specific.
 include("env.jl")
-
-using Preferences
-using UUIDs
-
-set_preferences!(UUID("65dc4606-9ae3-4b78-8734-204937373618"), "libvkfft_path" => METAL_WRAPPER_PATH; force=true)
 
 using AbstractFFTs
 using FFTW
@@ -80,12 +65,13 @@ const COMMON = normpath(joinpath(@__DIR__, "..", "common"))
 
 @testset verbose = true "VkFFT.jl on Metal" begin
     @testset "library" begin
-        @test VkFFT._max_dims() == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
-        @test VkFFT._backend_id() == 5
-        @test VkFFT._vkfft_config_size() == sizeof(VkFFT.VkFFTConfig)
+        lib = VkFFT._library(:metal)
+        @test VkFFT._vkfft_max_dims(lib) == VkFFT.VKFFT_MAX_FFT_DIMENSIONS
+        @test VkFFT._vkfft_backend(lib) == 5
+        @test VkFFT._vkfft_config_size(lib) == sizeof(VkFFT.VkFFTConfig)
         @test Base.get_extension(VkFFT, :VkFFTMetalExt) !== nothing
         println("device: ", Metal.device().name)
-        println("wrapper: ", METAL_WRAPPER_PATH)
+        println("wrapper: ", VkFFT.library_path(:metal))
     end
 
     include(joinpath(COMMON, "harness.jl"))

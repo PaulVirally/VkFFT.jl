@@ -194,7 +194,7 @@ end
 
     @testset "max_dims is not hardcoded" begin
         # The planner takes the axis limit as an argument. The ABI guard in
-        # _ensure_library! is what ties VKFFT_MAX_FFT_DIMENSIONS to the loaded
+        # _library is what ties VKFFT_MAX_FFT_DIMENSIONS to the loaded
         # library's vkfft_max_dims().
         dims = (2, 3, 4, 5)
         region = (2, 4) # batch, fft, batch, fft: four axes, nothing to fold

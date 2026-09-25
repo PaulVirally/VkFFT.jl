@@ -104,7 +104,7 @@ end
         @test isconcretetype(typeof(plan))
         @test typeof(plan) === VkFFTR2RPlan{WIDE_REAL, 3, false, BACKEND.name, 2}
         @test typeof(VkFFT.plan_dst!(x864, (1, 3))) === VkFFTR2RPlan{WIDE_REAL, 3, true, BACKEND.name, 2}
-        @test all(isconcretetype, fieldtypes(typeof(plan))[1:(end - 1)])
+        @test all(f -> f in (:stream, :pinv) || isconcretetype(fieldtype(typeof(plan), f)), fieldnames(typeof(plan)))
         @test fieldtype(typeof(plan), :pinv) === Union{Nothing, typeof(plan)}
     end
 
@@ -236,7 +236,7 @@ end
         # An empty region asks for no transform at all, which is the identity
         # along every axis and exact. A length-1 axis inside the region is the
         # different case, and is refused rather than quietly made an identity.
-        # That refusal has to be asserted in every process: a DCT-I of a
+        # That refusal has to be asserted on every backend: a DCT-I of a
         # length-1 axis is the one configuration that hangs inside vkfft_create
         # rather than failing.
         h = _noise(Float32, (4, 3))
