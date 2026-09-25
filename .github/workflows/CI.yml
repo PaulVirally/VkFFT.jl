@@ -81,7 +81,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # VKFFT_WRAPPER_PATH becomes the libvkfft_path preference in process,
       # before VkFFT is loaded. VkFFT uses it for the backend the wrapper was
@@ -130,7 +130,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # The suite skips Metal when it is not functional, which would leave this
       # job green without testing Metal.
@@ -185,7 +185,7 @@ jobs:
         with:
           version: "1"
 
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
 
       # ${{ matrix.jll }} is the extension's second trigger, so it has to be in
       # the project for the extension to activate at all. Adding it never
