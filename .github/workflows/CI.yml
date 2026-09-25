@@ -83,9 +83,9 @@ jobs:
 
       - uses: julia-actions/cache@v2
 
-      # VKFFT_WRAPPER_PATH is the name the OpenCL runner reads. It becomes the
-      # libvkfft_path preference in process, before VkFFT is loaded. The Metal
-      # and CUDA runners read different names.
+      # VKFFT_WRAPPER_PATH becomes the libvkfft_path preference in process,
+      # before VkFFT is loaded. VkFFT uses it for the backend the wrapper was
+      # built for and the JLLs for the rest.
       #
       # Coverage is off because most of the interesting code paths need a
       # device, so a number measured on this runner would be misleading.
@@ -132,40 +132,26 @@ jobs:
 
       - uses: julia-actions/cache@v2
 
-      # Pkg.test is not what runs here. It would start the OpenCL half of the
-      # suite, which then spawns the Metal half as a child, and neither pocl
-      # nor the backend 3 wrapper exists on this runner. The package list below
-      # is the one the suite builds for that child locally.
-      - name: Resolve a project for the Metal suite
+      # The suite skips Metal when it is not functional, which would leave this
+      # job green without testing Metal.
+      - name: Require a functional Metal
         run: |
           using Pkg
-          Pkg.develop(PackageSpec(path=ENV["GITHUB_WORKSPACE"]))
-          Pkg.add(["AbstractFFTs", "FFTW", "LinearAlgebra", "Metal", "Preferences", "Random", "Test", "UUIDs", "VkFFT_Metal_jll"])
-          Pkg.precompile()
-        shell: julia --color=yes {0}
-        env:
-          JULIA_PROJECT: ${{ runner.temp }}/metalenv
-
-      # Printed rather than asserted, so the log says whether there was a GPU
-      # before anyone starts reading test failures.
-      - name: Report the Metal device
-        run: |
+          Pkg.add("Metal")
           using Metal
-          println("Metal.functional() = ", Metal.functional())
           Metal.versioninfo()
+          Metal.functional() || error("Metal is not functional on this runner.")
         shell: julia --color=yes {0}
         env:
-          JULIA_PROJECT: ${{ runner.temp }}/metalenv
+          JULIA_PROJECT: ${{ runner.temp }}/metalcheck
 
-      # The last thing this runner includes is a check on VkFFTMetal.jl, which
-      # needs that package checked out beside this one and prints that it is
-      # skipping otherwise. VkFFTMetal.jl has a workflow of its own.
-      - name: Run the Metal suite
-        run: |
-          set -o pipefail
-          julia --color=yes --startup-file=no --project="${{ runner.temp }}/metalenv" test/metal/runtests.jl
+      # The wrapper built above serves Metal. OpenCL runs on pocl_jll with the
+      # JLL wrapper.
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: false
         env:
-          VKFFT_METAL_WRAPPER_PATH: ${{ github.workspace }}/libvkfft/build/libvkfft.dylib
+          VKFFT_WRAPPER_PATH: ${{ github.workspace }}/libvkfft/build/libvkfft.dylib
 
   extensions:
     name: Extension load - ${{ matrix.package }}
@@ -180,14 +166,17 @@ jobs:
           - package: CUDA
             extension: VkFFTCUDAExt
             jll: VkFFT_CUDA_jll
+            backend: cuda
             os: ubuntu-latest
           - package: OpenCL
             extension: VkFFTOpenCLExt
             jll: VkFFT_OpenCL_jll
+            backend: opencl
             os: ubuntu-latest
           - package: Metal
             extension: VkFFTMetalExt
             jll: VkFFT_Metal_jll
+            backend: metal
             os: macos-15
     steps:
       - uses: actions/checkout@v5
@@ -227,7 +216,7 @@ jobs:
           # so on a runner with no GPU it tags cuda = "none" and ships no
           # library for the extension to register.
           if ${{ matrix.jll }}.is_available()
-              println("${{ matrix.jll }} is available and VkFFT resolved: ", VkFFT.library_path())
+              println("${{ matrix.jll }} is available and VkFFT resolved: ", VkFFT.library_path(:${{ matrix.backend }}))
           else
               println("${{ matrix.jll }} is not available on this runner, so there is no path to register.")
           end
