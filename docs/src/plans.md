@@ -59,6 +59,10 @@ For an in-place plan, `p * x` returns `x` and `mul!(y, p, x)` demands
 The array reaching `mul!` need not be the one the plan was built from, only the
 same size, element type, layout and device.
 
+`p * x` and `mul!` return once the transform is queued, as the array package's
+own kernels do. Work you submit afterwards from the same task runs after it. To
+time a transform, synchronize first, for example with `CUDA.synchronize()`.
+
 ## Inverses
 
 ```julia
