@@ -139,7 +139,7 @@ synchronize!(spy::Spy) = (push!(spy.steps, :synchronize); nothing)
         @test length(taken) == 2
         @test length(taken[1]) == length(taken[2])        # the round robin visits both equally
         @test timed.inner == [1, 1]                        # both are already longer than the timer target
-        @test slow.calls[] == fast.calls[] == length(taken[1]) + 3 # plus a warmup and two sizing calls each
+        @test slow.calls[] == fast.calls[] == length(taken[1]) + 5 # plus a warmup and four sizing calls each
         @test sum(taken[1]) >= 0.05                        # the slowest spends the budget
         @test all(t -> t > 5e-3, taken[1])
 
@@ -172,11 +172,11 @@ synchronize!(spy::Spy) = (push!(spy.steps, :synchronize); nothing)
         applied = count(==(:apply), batching.steps)
         @test size > 1 # an apply of a few tens of nanoseconds is batched
         @test batching.steps[1:3] == [:refill, :apply, :synchronize]
-        @test count(==(:refill), batching.steps) == rounds + 3 # one per sample, and one for the warmup and each sizing call
-        @test count(==(:synchronize), batching.steps) == rounds + 3
+        @test count(==(:refill), batching.steps) == rounds + 5 # one per sample, and one for the warmup and each sizing call
+        @test count(==(:synchronize), batching.steps) == rounds + 5
         @test batching.steps[end] === :synchronize
         @test all(i -> batching.steps[i - 1] === :synchronize, findall(==(:refill), batching.steps)[2:end])
-        @test 2 + size * rounds < applied <= 2 + MAX_INNER + size * rounds # the sizing batch is the only unknown
+        @test 2 + size * rounds < applied <= 2 + 3 * MAX_INNER + size * rounds # the sizing batches are the only unknown
     end
 
     @testset "summary statistics" begin

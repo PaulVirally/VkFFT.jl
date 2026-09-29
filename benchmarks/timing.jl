@@ -25,7 +25,7 @@ const BOOTSTRAP_SEED = 0x626f_6f74_0000_0000
 Times every prepared implementation of one case in lockstep and returns their sample times and batch sizes.
 
 Each implementation is warmed up once and thrown away, since a first call
-carries kernel compilation, first touch of its buffers and a cold clock. Two
+carries kernel compilation, first touch of its buffers and a cold clock. Four
 further calls size that implementation's batch, where there is a batch to size.
 Every round after that takes one sample from each of them in turn, each sample preceded by a `refill!`
 outside the clock so that the transform always meets its pristine input. Rounds
@@ -42,9 +42,9 @@ A sample times `inner` applications back to back, waits once for the device and
 divides. The batch amortizes two fixed costs. One is the wait, about 100 us on
 Metal against about 14 us of queued work per call at small sizes. The other is
 the clock: `time_ns()` ticks at 41.7 ns on Apple Silicon, so a transform of a
-few tens of nanoseconds timed one call at a time reads as zero, one tick or two. The batch is sized so that it lasts `TIMER_TARGET` whatever the transform
-costs, and it is held fixed for the duel so that both sides are measured the
-same way.
+few tens of nanoseconds timed one call at a time reads as zero, one tick or two.
+The batch is sized so that it lasts `TIMER_TARGET` whatever the transform costs,
+and it is held fixed for the duel so that both sides are measured the same way.
 
 The two are not the same measurement and `inner` is recorded beside the times
 because of it: a batch amortizes the per call overhead that a single timed call
@@ -72,15 +72,17 @@ function duel(preps; budget=BUDGET, min_samples=MIN_SAMPLES, max_samples=MAX_SAM
         _sample(prep, 1)
     end
 
-    # The batch is sized from a timed call and then again from a timed batch.
-    # One pass is not enough at the small end: a few applications in, the caches
-    # are still cold, and the one call carries the whole device wait, so the
-    # reading is an order of magnitude slow and the batch would come out far too
-    # short. The nanosecond floor is there because a call at the clock's
-    # resolution can time as zero, which would otherwise divide into an infinity.
+    # The batch is sized from a timed call and then three more times from the
+    # batch the last reading asked for. A batch of k calls reads the cost of one
+    # call plus the device wait over k, so a short batch overestimates the cost
+    # and asks for a batch that is still too short. On Metal, where the wait is
+    # about 100 us, the second pass lands at a fifth to a half of the target and
+    # the fourth lands on it. The nanosecond floor is there because a call at the
+    # clock's resolution can time as zero, which would otherwise divide into an
+    # infinity.
     inner = ones(Int, length(preps))
     if repeatable
-        for (i, prep) in enumerate(preps), _ in 1:2
+        for (i, prep) in enumerate(preps), _ in 1:4
             inner[i] = clamp(ceil(Int, TIMER_TARGET / max(_sample(prep, inner[i]), 1e-9)), 1, MAX_INNER)
         end
     end
