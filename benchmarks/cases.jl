@@ -47,13 +47,12 @@ sweep beside it, which is exactly where the two are worth comparing.
 
 Metal has no `Float64` at all, which is a hardware limitation rather than a gap
 in the bindings, so it carries half precision in place of double. It is also the
-one backend with a rival that takes half, which is why `ComplexF16` appears
-there and nowhere else. Its memory is the host's, so the whole shape list fits
+one backend where VkFFT and its rival both take half, which is why `ComplexF16`
+appears there and nowhere else. Its memory is the host's, so the whole shape list fits
 and it has no cap.
 
 CUDA takes half in VkFFT only through a wrapper built against a CUDA toolkit,
-and CUDA.jl does not reach cuFFT's half path at all, so a half row here would
-carry one implementation and duel nobody. The card's 48 GB swallows the whole
+and the JLL's wrapper is not one, so a half row here would carry cuFFT alone. The card's 48 GB swallows the whole
 shape list, whose largest case is a quarter of a gigabyte.
 
 `tuning` is false for FFTW alone, since the tuner belongs to VkFFT and an FFTW

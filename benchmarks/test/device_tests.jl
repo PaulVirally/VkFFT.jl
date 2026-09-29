@@ -39,13 +39,9 @@ const rtol_device = Dict(Float64 => 1e-12, Float32 => 1e-4, Float16 => 5e-3)
             @test !(ComplexF64 in caps.types)
             @test_throws Exception DeviceArray{ComplexF64}(undef, 4)
         elseif BACKEND === :cuda
-            # Half is left out because cuFFT's half path is not reachable from
-            # CUDA.jl, so the row would carry VkFFT alone. The array type takes
-            # the element and the planner is what refuses it, which is the thing
-            # worth asking the device rather than asserting from a table.
+            # Half is left out because VkFFT's JLL wrapper has no half precision
+            # on CUDA, so the row would carry cuFFT alone.
             @test !(ComplexF16 in caps.types)
-            @test DeviceArray{ComplexF16}(undef, 1024) isa DeviceArray{ComplexF16}
-            @test_throws Exception AbstractFFTs.plan_fft(DeviceArray{ComplexF16}(undef, 1024), 1)
 
             # The cliff lives here and only here, and the card has to hold the
             # uncapped shape list the entry claims it holds. The largest case is
@@ -60,7 +56,7 @@ const rtol_device = Dict(Float64 => 1e-12, Float32 => 1e-4, Float16 => 5e-3)
             # particular have to be in the sweep, since the primes are the
             # Bluestein path and P3 is short two points without them.
             @test all(c -> supports(VkFFTImpl(), c), matrix)
-            @test count(c -> prod(c.dims) in (4093, 8191), matrix) == 12
+            @test count(c -> c.class === :prime && prod(c.dims) in (4093, 8191), matrix) == 12
 
             # What the manifest needs to make a GPU run reproducible. A field the
             # machine does not answer is left out rather than written empty, and
