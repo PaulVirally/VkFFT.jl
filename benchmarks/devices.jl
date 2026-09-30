@@ -178,6 +178,12 @@ else
     using OpenCL
     using VkFFTOpenCL
 
+    # VkFFT needs cl.Buffer storage. A driver with coarse-grained SVM and no
+    # buffer device address, NVIDIA's for one, leaves buffers off OpenCL.jl's
+    # list of backends, and the default_memory_backend preference can only pick
+    # from that list. Setting the backend on this task bypasses the list.
+    task_local_storage(:CLMemoryBackend, cl.BufferBackend())
+
     const DeviceArray = CLArray
 
     synchronize_device() = cl.finish(cl.queue())
