@@ -10,6 +10,24 @@ This package defines all the exported functions, plan types, plan cache, etc.
 This package is not the one you load if you want to use VkFFT in Julia. Rather,
 you must load one of the backends.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/src/assets/benchmarks/p1-speedup-dark.svg">
+  <img alt="Speedup of VkFFT over cuFFT on an RTX A6000, over MPSGraph on an M3 Pro, and over FFTW on the M3 Pro's CPU" src="docs/src/assets/benchmarks/p1-speedup-light.svg">
+</picture>
+
+VkFFT against the FFT each device already has. Above 1x VkFFT is faster. It
+beats cuFFT in 186 of 235 cases and MPSGraph in 175 of 204. On a CPU, FFTW wins.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/src/assets/benchmarks/p4-cliff-dark.svg">
+  <img alt="Time per transform for every length from 4080 to 4110 on an RTX A6000, VkFFT against cuFFT" src="docs/src/assets/benchmarks/p4-cliff-light.svg">
+</picture>
+
+Every length from 4080 to 4110 on the A6000. Lengths with a large prime factor
+cost more on both libraries, and less on VkFFT. The method and the rest of the
+figures are in
+[Benchmarks](https://paulvirally.github.io/VkFFT.jl/stable/benchmarks/).
+
 ## Which package do you want?
 
 Load `VkFFTCUDA`, `VkFFTOpenCL` or `VkFFTMetal`, not this package. Each one of

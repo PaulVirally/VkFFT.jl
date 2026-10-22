@@ -81,4 +81,5 @@ since OpenCL.jl has no FFT of its own).
 - [Limitations](limitations.md) for the layout rules, the lifetime rules or
   the raw configuration.
 - [Migrating from VkFFTCUDA 0.2](migration.md) if you used the old package.
+- [Benchmarks](benchmarks.md) for VkFFT against cuFFT, MPSGraph and FFTW.
 - [API reference](api.md) for the docstrings.
