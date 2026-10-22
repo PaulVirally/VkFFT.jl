@@ -1,0 +1,5 @@
+# VkFFT drives clSetKernelArg with a cl_mem, so OpenCL.jl has to hand out
+# buffer-backed arrays rather than its default unified-memory ones. The planner
+# refuses a unified-memory CLArray outright.
+[OpenCL]
+default_memory_backend = "buffer"

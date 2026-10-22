@@ -209,6 +209,25 @@
         @test VkFFT.cache_size() == 1
     end
 
+    @testset "one plan on four streams" begin
+        # Both shapes are split across uploads, so every application goes
+        # through the plan's one scratch buffer. Each task submits to a stream
+        # of its own, and yield() lets the next task queue before this one is
+        # done.
+        for dims in ((65521,), (2^20,))
+            hs = [t .* _noise(ComplexF32, dims) for t in 1:4]
+            xs = _upload.(hs)
+            ys = similar.(xs)
+            plan = VkFFT.plan_fft(xs[1])
+            tasks = [@async begin
+                         mul!(ys[t], plan, xs[t])
+                         yield()
+                         Array(ys[t])
+                     end for t in 1:4]
+            @test all(t -> _relmax(fetch(tasks[t]), fft(hs[t])) < _rtol(ComplexF32), 1:4)
+        end
+    end
+
     @testset "finalizers" begin
         VkFFT.clear_cache!()
         plan = VkFFT.plan_fft(_upload(_noise(ComplexF32, (256,))), 1)
