@@ -55,10 +55,13 @@ function VkFFT._check_layout(x::MtlArray)
     return nothing
 end
 
-# pointer(x) is Metal.jl's own accessor, and the buffer it names is the whole
-# allocation. _check_layout has already established that the array starts at the
-# base of it.
-VkFFT._buffer_handle(x::MtlArray) = _objc_handle(pointer(x).buffer)
+# Base.unsafe_convert is how Metal.jl hands a buffer to foreign code. From
+# Metal.jl 1.12 it also records that the task is about to use the buffer, and the
+# next command buffer the task commits takes that use over, which is what makes
+# a later read of the array wait for the transform. The buffer is the whole
+# allocation. _check_layout has already established that the array starts at
+# the base of it.
+VkFFT._buffer_handle(x::MtlArray) = _objc_handle(Base.unsafe_convert(MTL.MTLBuffer, x))
 
 VkFFT._stream(x::MtlArray) = _queue(x)
 
@@ -102,19 +105,29 @@ end
 # _stream_handle method here: the wrapper takes a command buffer, one per
 # application, and the caller commits it. _with_execution owns that.
 #
-# The command buffer comes back from the queue autoreleased, so the pool is what
-# reclaims it. Releasing it by hand would be an over-release. Nothing commits
-# until f has returned, so f is free to append several transforms to the one
-# command buffer, and their encoders run in the order they were made.
+# Up to Metal.jl 1.11 the command buffer comes back from the queue autoreleased,
+# so the pool is what reclaims it. Releasing it by hand would be an
+# over-release. From 1.12 (ObjectiveC.jl 7) the call that makes it takes
+# ownership and a finalizer releases it, so there is no pool, and
+# @autoreleasepool is gone anyway. Nothing commits until f has returned, so f is
+# free to append several transforms to the one command buffer, and their
+# encoders run in the order they were made.
 function VkFFT._with_execution(f, x::MtlArray)
     queue = _queue(x)
     Metal.flush!(queue) # commit Metal.jl's open batch first, so its work runs before ours
 
-    return Metal.@autoreleasepool begin
+    @static if isdefined(Metal, Symbol("@autoreleasepool"))
+        return Metal.@autoreleasepool begin
+            command_buffer = MTL.MTLCommandBuffer(queue)
+            res = f(_objc_handle(command_buffer))
+            MTL.commit!(command_buffer)
+            res
+        end
+    else
         command_buffer = MTL.MTLCommandBuffer(queue)
         res = f(_objc_handle(command_buffer))
         MTL.commit!(command_buffer)
-        res
+        return res
     end
 end
 
