@@ -1,7 +1,7 @@
 name = "VkFFT"
 uuid = "65dc4606-9ae3-4b78-8734-204937373618"
-authors = ["Paul Virally"]
 version = "0.1.2"
+authors = ["Paul Virally"]
 
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
@@ -31,7 +31,7 @@ CUDA = "5, 6"
 Libdl = "1"
 LinearAlgebra = "1"
 Metal = "1.10"
-OpenCL = "0.10"
+OpenCL = "0.10, 1"
 PrecompileTools = "1.2"
 Preferences = "1.4"
 SHA = "0.7, 1"
